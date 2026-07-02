@@ -1,0 +1,21 @@
+# Node/Next.js artifacts
+**/node_modules/
+**/.next/
+
+# Build outputs (common)
+**/dist/
+**/out/
+
+# Tooling caches
+**/.turbo/
+**/.vercel/
+
+# Environment files
+**/.env
+
+# OS
+.DS_Store
+
+# Local-only spec/mockup notes (not for team branch)
+docs/audit-mockup/
+docs/work_audit_ui_guide/

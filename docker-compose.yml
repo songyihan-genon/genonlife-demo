@@ -1,0 +1,52 @@
+services:
+  web:
+    build:
+      context: ./frontend
+      args:
+        # 빌드 시점에 Next.js에 전달되는 환경 변수
+        NEXT_PUBLIC_RESEARCH_API_BASE_URL: ${NEXT_PUBLIC_RESEARCH_API_BASE_URL:-http://localhost:5588}
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      RESEARCH_API_ENDPOINT: http://api:5588/chat/research
+      BACKEND_URL: http://api:5588
+      # 런타임 환경 변수 (서버 사이드에서 사용)
+      NEXT_PUBLIC_RESEARCH_API_BASE_URL: ${NEXT_PUBLIC_RESEARCH_API_BASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DEEPSEARCH_API_KEY: ${DEEPSEARCH_API_KEY:-d3BzaHM6d3BzaHMx}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      SEARCHAPI_KEY: ${SEARCHAPI_KEY}
+    ports:
+      - "5054:5054"
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "5588:5588"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_URL: ${BACKEND_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-878601515346-scik06c7h3rdmp7ft4daphrl2u53ikkj.apps.googleusercontent.com}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      SEARCHAPI_KEY: ${SEARCHAPI_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

@@ -1,0 +1,12 @@
+.git
+.gitignore
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/.turbo
+frontend/.swc
+frontend/.vercel
+node_modules
+**/__pycache__/
+**/*.pyc
+*.log
