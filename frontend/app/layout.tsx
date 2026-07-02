@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   generator: "v0.app",
 }
 
+// 데모는 전부 클라이언트 인터랙션(useSearchParams·localStorage 등) — 정적 프리렌더 대신 동적 렌더링으로 빌드 프리렌더 에러 방지
+export const dynamic = "force-dynamic"
+
 export default function RootLayout({
   children,
 }: Readonly<{
