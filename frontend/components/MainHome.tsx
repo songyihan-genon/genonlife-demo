@@ -21,6 +21,8 @@ import {
   PhoneIncoming,
   ScrollText,
   Search,
+  FileText,
+  X,
   ShieldCheck,
   Smile,
   Sparkles,
@@ -59,6 +61,36 @@ const STATUS_META: Record<string, string> = {
   완료: "border-emerald-200 bg-emerald-50 text-emerald-700",
 }
 const ASSIST_SUGGEST = ["실손 청구 구비서류 기준은?", "자동이체 변경 적용일은?", "해지환급금 계산 방법은?", "갱신 보험료 안내 스크립트"]
+// 업무 어시스턴트 목업 답변 — 검색 시 같은 화면 결과 패널에 표시
+const ASSIST_ANSWERS: Record<string, { answer: string; sources: string[] }> = {
+  "실손 청구 구비서류 기준은?": {
+    answer: "실손의료비 청구 기본 서류는 ① 보험금청구서 ② 진단서 또는 진료확인서 ③ 진료비 영수증·세부내역서 ④ 신분증 사본입니다. 청구금액이 100만원을 초과하면 진단서 원본이 필요하고, 통원 청구는 처방전·약제비 영수증을 추가로 제출합니다.",
+    sources: ["실손의료비 특약 약관 §7", "보험금 청구 업무 매뉴얼 3.2"],
+  },
+  "자동이체 변경 적용일은?": {
+    answer: "자동이체 계좌·출금일 변경은 신청일 기준 영업일 2일 이후 출금분부터 적용됩니다. 마감 시각(오후 3시) 이후 신청 건은 익영업일 접수로 처리되며, 변경 완료 시 SMS로 안내됩니다.",
+    sources: ["수납·자동이체 운영지침 2.1"],
+  },
+  "해지환급금 계산 방법은?": {
+    answer: "해지환급금 = 책임준비금 − 미상각 신계약비(해지공제)입니다. 가입 초기에는 해지공제가 커서 환급률이 낮고, 경과기간이 늘수록 상승합니다. 상품·경과월별 환급률은 설계서 및 약관 별표를 따르며, 100% 환급을 일괄 안내하지 않도록 유의합니다.",
+    sources: ["해지환급금 산출기준", "약관 별표 · 해지환급금표"],
+  },
+  "갱신 보험료 안내 스크립트": {
+    answer: "표준 안내: “고객님, 이번 갱신은 연령 증가와 위험률 변동으로 보험료가 조정됩니다. 갱신 후 보험료는 월 OO원이며 보장은 동일하게 유지됩니다. 부담되실 경우 감액·특약 조정 옵션도 함께 안내드릴 수 있습니다.”",
+    sources: ["갱신 안내 표준 스크립트 v3"],
+  },
+}
+const assistAnswer = (q: string) => ASSIST_ANSWERS[q] ?? { answer: `“${q}”에 대한 요약 답변입니다. 관련 약관·규정·스크립트를 근거로 정리했으며, 자세한 내용은 상담지식 검색에서 확인할 수 있습니다.`, sources: ["상담지식 베이스"] }
+// 근거(매뉴얼·약관·규정) 원문 — 근거 태그 클릭 시 팝업으로 표시
+const MANUALS: Record<string, { title: string; category: string; body: string }> = {
+  "실손의료비 특약 약관 §7": { title: "실손의료비 보장 특약 약관 제7조 (보험금 청구 서류)", category: "약관", body: "① 회사는 보험금 청구 시 다음 각 호의 서류를 확인한다.\n  1. 보험금 청구서(회사 소정 양식)\n  2. 병원 진단서 또는 진료확인서\n  3. 진료비 영수증 및 진료비 세부내역서\n  4. 청구인 신분증 사본\n② 청구금액이 100만원을 초과하는 경우 진단서 원본을 제출하여야 한다.\n③ 통원 의료비는 처방전 및 약제비 영수증을 추가로 제출한다." },
+  "보험금 청구 업무 매뉴얼 3.2": { title: "보험금 청구 업무 매뉴얼 3.2 (구비서류 안내)", category: "매뉴얼", body: "상담사는 청구 유형(입원·통원·수술)에 따라 필요한 구비서류를 안내한다. 서류 누락은 접수 지연 사유가 되므로 청구 전 체크리스트로 사전 확인한다.\n\n고액 청구(100만원 초과) 건은 진단서 원본 제출 및 추가 심사가 필요함을 반드시 안내한다." },
+  "수납·자동이체 운영지침 2.1": { title: "수납·자동이체 운영지침 2.1 (변경 적용 기준)", category: "지침", body: "자동이체 계좌·출금일 변경은 신청일 기준 영업일 2일 이후 출금분부터 적용한다.\n\n마감 시각(15:00) 이후 접수 건은 익영업일 접수로 처리하며, 변경 완료 시 고객에게 SMS로 통지한다." },
+  "해지환급금 산출기준": { title: "해지환급금 산출기준", category: "규정", body: "해지환급금 = 책임준비금 − 미상각 신계약비(해지공제)\n\n가입 초기에는 해지공제가 커서 환급률이 낮고, 경과기간이 늘수록 상승한다. 100% 환급을 일괄 안내하지 않으며, 경과월별 환급률은 약관 별표를 따른다." },
+  "약관 별표 · 해지환급금표": { title: "약관 별표 · 해지환급금표", category: "약관", body: "상품별·경과월별 해지환급률을 정한 별표. 설계서에 첨부된 예시표와 동일 기준을 적용한다.\n\n예) 종신보험 10년납 기준 — 1년 경과 약 8%, 3년 약 34%, 5년 약 58%, 10년 약 92% (상품·특약에 따라 상이)." },
+  "갱신 안내 표준 스크립트 v3": { title: "갱신 보험료 안내 표준 스크립트 v3", category: "스크립트", body: "“고객님, 이번 갱신은 연령 증가와 위험률 변동으로 보험료가 조정됩니다. 갱신 후 보험료는 월 OOO원이며 보장은 동일하게 유지됩니다.\n\n부담되실 경우 감액 또는 특약 조정 옵션도 함께 안내드릴 수 있습니다.”" },
+  "상담지식 베이스": { title: "상담지식 베이스", category: "지식", body: "약관·규정·매뉴얼·QnA를 통합 검색하는 상담지식 베이스입니다. 상세 내용은 상담지식 검색에서 확인하세요." },
+}
 
 const TOOLS = [
   { label: "상담지식 검색", href: "/counseling-knowledge", icon: BookOpen },
@@ -139,9 +171,26 @@ function AgentHome() {
 
   // 업무 어시스턴트 빠른 검색
 const [q, setQ] = useState("")
-  const askAssistant = (_text: string) => {
-    // 데모: 페이지 이동 없이 동작 비활성화
+  const [thread, setThread] = useState<{ id: number; q: string; done: boolean }[]>([])
+  const askIdRef = useRef(0)
+  const askAssistant = (text: string) => {
+    const t = text.trim()
+    if (!t) return
+    const id = ++askIdRef.current
+    setThread((prev) => [...prev, { id, q: t, done: false }])
+    setQ("")
+    // 데모: 답변 생성 로딩 흉내 후 노출
+    window.setTimeout(() => setThread((prev) => prev.map((it) => (it.id === id ? { ...it, done: true } : it))), 850)
   }
+  const [manual, setManual] = useState<string | null>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
+  // 새 질문 시 마지막(최신) 버블의 상단으로 스크롤 → 매번 같은 시작점에서 답변을 읽음
+  useEffect(() => {
+    const el = threadRef.current
+    if (!el) return
+    const last = el.lastElementChild as HTMLElement | null
+    el.scrollTop = last ? last.offsetTop : el.scrollHeight
+  }, [thread])
   const needCount = RECENT.filter((r) => r.status !== "완료").length
   const [historyOpen, setHistoryOpen] = useState(true)
 
@@ -151,11 +200,11 @@ const [q, setQ] = useState("")
       {/* ════════════════════════════════
           LEFT — 메인 작업 존 (화이트)
       ════════════════════════════════ */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-white">
-        <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#f8fbfe]">
+        <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col xl:max-w-4xl 2xl:max-w-5xl">
 
         {/* ── 웰컴 + KPI ── */}
-        <div className="px-9 pb-8 pt-12">
+        <div className="px-10 pb-6 pt-9 xl:px-16 2xl:px-24">
           {/* 웰컴 행 */}
           <div className="mb-5">
             <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">고객서비스팀</p>
@@ -207,66 +256,117 @@ const [q, setQ] = useState("")
         </div>
 
         {/* 구분선 — 네이비→민트 그라데이션 */}
-        <div className="mx-9 h-px" style={{ background: "linear-gradient(to right, #0f3468 0%, #2f8bff 45%, #15c2a2 100%)", opacity: 0.5 }} />
+        <div className="mx-10 h-px xl:mx-16 2xl:mx-24" style={{ background: "linear-gradient(to right, #0f3468 0%, #2f8bff 45%, #15c2a2 100%)", opacity: 0.5 }} />
 
         {/* ── 업무 어시스턴트 ── */}
-        <div className="flex min-h-0 flex-1 flex-col px-9 pb-10 pt-9">
+        <div className="flex min-h-0 flex-1 flex-col px-10 pb-8 pt-6 xl:px-16 2xl:px-24">
           <div className="mb-2 flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] shadow-sm shadow-[#15457f]/20">
               <Sparkles className="h-3.5 w-3.5 text-white" />
             </span>
             <span className="text-[14px] font-semibold text-foreground">나만의 업무 어시스턴트</span>
           </div>
-          <p className="mb-6 text-[11.5px] text-muted-foreground">약관·규정·스크립트를 빠르게 검색하거나 아래 예시 질문을 선택하세요.</p>
+          {thread.length === 0 ? <p className="mb-4 text-[11.5px] text-muted-foreground">약관·규정·스크립트를 빠르게 검색하거나 아래 예시 질문을 선택하세요.</p> : null}
+
+          {/* 결과 — 검색 후 상단에 표시(검색창은 자연스럽게 아래로) */}
+          {thread.length > 0 ? (
+            <div ref={threadRef} className="relative mb-5 max-h-[68vh] space-y-4 overflow-y-auto pr-1">
+              {thread.map((it, idx) => { const a = assistAnswer(it.q); const isLast = idx === thread.length - 1; return (
+                <div key={it.id} className={cn("space-y-2", isLast && thread.length > 1 && "min-h-[68vh]")}>
+                  <div className="flex justify-end"><div className="max-w-[85%] rounded-2xl rounded-tr-sm border border-[#e2e8f0] bg-[#eef1f5] px-3 py-2 text-[11.5px] leading-snug text-[#33445c]">{it.q}</div></div>
+                  <div className="rounded-xl border border-[#cfe0f4] bg-[#f6fbff] p-3.5">
+                    <div className="mb-1.5 flex items-center gap-1.5"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] shadow-sm shadow-[#15457f]/20"><Sparkles className="h-3 w-3 text-white" /></span><span className="text-[11px] font-semibold text-[#10233f]">AI 어시스턴트</span></div>
+                    {it.done ? (
+                      <>
+                        <p className="whitespace-pre-line text-[12px] leading-6 text-[#27456b]">{a.answer}</p>
+                        {a.sources.length ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[#e0ebf6] pt-2.5">
+                            <span className="text-[10px] font-medium text-muted-foreground">근거</span>
+                            {a.sources.map((s) => <button key={s} type="button" onClick={() => setManual(s)} className="inline-flex items-center gap-1 rounded border border-[#dbe5f1] bg-white px-1.5 py-0.5 text-[10px] text-[#0b4f91] transition-colors hover:border-[#9cc4ee] hover:bg-[#eef4fb]"><FileText className="h-2.5 w-2.5" />{s}</button>)}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2 py-1">
+                        <span className="flex gap-1">
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8aa6c6] [animation-delay:-0.3s]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8aa6c6] [animation-delay:-0.15s]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#8aa6c6]" />
+                        </span>
+                        <span className="text-[10.5px] text-muted-foreground">답변 생성 중…</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) })}
+            </div>
+          ) : null}
 
           {/* 검색창 — chat-interface 스타일 */}
-          <div className="relative mb-6 rounded-xl bg-gradient-to-r from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] p-[1.5px] shadow-sm">
+          <div className="relative mb-4 rounded-xl bg-gradient-to-r from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] p-[1.5px] shadow-sm">
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") askAssistant(q) }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) askAssistant(q) }}
               placeholder="어떤 도움이 필요하신가요?"
-              className="h-12 rounded-[10.5px] border-0 bg-white pr-12 text-[13px] placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-11 rounded-[10.5px] border-0 bg-white pr-12 text-[13px] placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             <button
               type="button"
               onClick={() => askAssistant(q)}
               disabled={!q.trim()}
-              className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-[#0f3468] text-white transition-colors hover:bg-[#0b2547] disabled:opacity-30"
+              className={cn("absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-white transition-all", q.trim() ? "bg-gradient-to-r from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] shadow-sm shadow-[#15457f]/25 hover:brightness-105" : "cursor-not-allowed bg-[#d3ddea]")}
             >
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          {/* 예시 질문 — 리스트형 구분선 */}
-          <div className="mb-9 overflow-hidden rounded-xl border border-[#e6edf5] bg-white">
-            {ASSIST_SUGGEST.map((s, i) => (
-              <div key={s}>
+          {/* 예시 질문 — 초기: 리스트형 / 질문 후: 검색창 아래 알약(pill) 칩 */}
+          {thread.length === 0 ? (
+            <div className="mb-6 shrink-0 overflow-hidden rounded-xl border border-[#e6edf5] bg-white">
+              {ASSIST_SUGGEST.map((s, i) => (
+                <div key={s}>
+                  <button
+                    type="button"
+                    onClick={() => askAssistant(s)}
+                    className="flex w-full min-w-0 items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[#f5f8fc]"
+                  >
+                    <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                    <span className="min-w-0 flex-1 text-[11.5px] leading-snug text-muted-foreground hover:text-foreground">{s}</span>
+                  </button>
+                  {i < ASSIST_SUGGEST.length - 1 && <div className="h-px bg-[#eef2f7]" />}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mb-6 flex flex-wrap gap-2">
+              {ASSIST_SUGGEST.map((s) => (
                 <button
+                  key={s}
                   type="button"
                   onClick={() => askAssistant(s)}
-                  className="flex w-full min-w-0 items-center gap-3 overflow-hidden px-4 py-3.5 text-left transition-colors hover:bg-[#f5f8fc]"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#dbe5f1] bg-white px-3 py-1.5 text-[11px] text-[#5b6b80] transition-colors hover:border-[#9cc4ee] hover:bg-[#eef4fb] hover:text-[#0f3468]"
                 >
-                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-                  <span className="min-w-0 truncate text-[11.5px] text-muted-foreground hover:text-foreground">{s}</span>
+                  <Search className="h-3 w-3 shrink-0 text-muted-foreground/50" />{s}
                 </button>
-                {i < ASSIST_SUGGEST.length - 1 && <div className="h-px bg-[#eef2f7]" />}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
-          {/* 바로가기 */}
-          <p className="mb-4 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">바로가기</p>
-          <div className="grid grid-cols-4 gap-3.5">
-            {TOOLS.map((t) => (
-              <div key={t.label}
-                className="group flex cursor-default flex-col items-center gap-2.5 rounded-xl border border-[#e6edf5] bg-white px-3 py-5 transition-all hover:border-[#cfe4f6] hover:shadow-sm">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#cfe4f6] bg-[#eaf4fd] transition-all group-hover:border-transparent group-hover:bg-gradient-to-br group-hover:from-[#3db0ff] group-hover:via-[#2f8bff] group-hover:to-[#15c2a2] group-hover:shadow-sm group-hover:shadow-[#15457f]/20">
-                  <t.icon className="h-4 w-4 text-[#2f8bff] transition-colors group-hover:text-white" />
+          {/* 바로가기 — 화면 하단 정렬(mt-auto) */}
+          <div className="mt-auto pt-6">
+            <p className="mb-4 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">바로가기</p>
+            <div className="grid grid-cols-4 gap-3.5">
+              {TOOLS.map((t) => (
+                <div key={t.label}
+                  className="group flex cursor-default flex-col items-center gap-2.5 rounded-xl border border-[#e6edf5] bg-white px-3 py-5 transition-all hover:border-[#cfe4f6] hover:shadow-sm">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] p-[1.5px] shadow-sm shadow-[#15457f]/20">
+                    <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-white transition-colors group-hover:bg-transparent"><t.icon className="h-4 w-4 text-[#2f8bff] transition-colors group-hover:text-white" /></div>
+                  </div>
+                  <span className="text-center text-[11.5px] font-medium text-muted-foreground transition-colors group-hover:text-[#10233f]">{t.label}</span>
                 </div>
-                <span className="text-center text-[11.5px] font-medium text-muted-foreground transition-colors group-hover:text-[#10233f]">{t.label}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
         </div>{/* max-w wrapper */}
@@ -406,6 +506,23 @@ const [q, setQ] = useState("")
         </div>
 
       </div>
+
+      {/* 근거 매뉴얼/약관 팝업 */}
+      {manual ? (() => { const m = MANUALS[manual] ?? { title: manual, category: "문서", body: "문서 내용을 찾을 수 없습니다." }; return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setManual(null)}>
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#e6edf5] bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-2 border-b border-[#eef2f7] px-5 py-3.5">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#eef4fb] text-[#0f3468]"><FileText className="h-3.5 w-3.5" /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8aa6c6]">{m.category}</div>
+                <div className="text-[13px] font-bold text-[#10233f]">{m.title}</div>
+              </div>
+              <button type="button" onClick={() => setManual(null)} className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-[#f1f5f9]"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto px-5 py-4"><p className="whitespace-pre-line text-[12px] leading-6 text-[#27456b]">{m.body}</p></div>
+          </div>
+        </div>
+      ) })() : null}
     </div>
   )
 }
@@ -589,20 +706,20 @@ function Donut({ items, center, centerSub }: { items: { label: string; value: nu
     })
     .join(", ")
   return (
-    <div className="flex items-center gap-3.5">
-      <div className="relative h-[72px] w-[72px] shrink-0 rounded-full" style={{ background: `conic-gradient(${stops})` }}>
+    <div className="flex items-center gap-3">
+      <div className="relative h-[64px] w-[64px] shrink-0 rounded-full" style={{ background: `conic-gradient(${stops})` }}>
         <div className="absolute inset-[27%] flex flex-col items-center justify-center rounded-full bg-white shadow-[0_0_0_1px_rgba(15,35,68,0.05)]">
-          <span className="text-[15px] font-bold leading-none tracking-tight text-[#10233f]">{center}</span>
-          <span className="mt-0.5 text-[8px] text-muted-foreground">{centerSub}</span>
+          <span className="text-[14px] font-bold leading-none tracking-tight text-[#10233f]">{center}</span>
+          <span className="mt-0.5 text-[7.5px] text-muted-foreground">{centerSub}</span>
         </div>
       </div>
       <div className="min-w-0 flex-1 space-y-1.5">
         {items.map((i) => (
           <div key={i.label} className="flex items-center gap-1.5 text-[10px]">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: i.color }} />
-            <span className="text-[#33445c]">{i.label}</span>
-            <span className="ml-auto font-semibold tabular-nums text-[#10233f]">{i.value}</span>
-            <span className="w-7 text-right text-[9px] tabular-nums text-muted-foreground">{Math.round((i.value / total) * 100)}%</span>
+            <span className="min-w-0 flex-1 truncate text-[#33445c]">{i.label}</span>
+            <span className="shrink-0 font-semibold tabular-nums text-[#10233f]">{i.value}</span>
+            <span className="w-7 shrink-0 text-right text-[9px] tabular-nums text-muted-foreground">{Math.round((i.value / total) * 100)}%</span>
           </div>
         ))}
       </div>
@@ -871,74 +988,94 @@ function AdminHome() {
 
       {/* RIGHT — 업무 요약 → 진입 */}
       <div className="hidden w-[220px] shrink-0 flex-col border-l border-[#e6edf5] bg-white lg:flex xl:w-[247px] 2xl:w-[284px]">
-        <div className="flex min-h-0 flex-1 flex-col divide-y divide-[#eef2f7] overflow-y-auto">
-          {/* 콜상담 운영 관리 */}
-          <div className="bg-[#fafcff] px-5 pt-2.5 pb-1 text-[9px] font-bold uppercase tracking-wider text-[#0b4f91]/70">콜상담 운영 관리</div>
-
-          <div className="flex items-center gap-1.5 border-b border-[#eef2f7] bg-[#fafcfe] px-5 pt-2.5 pb-1.5">
-            <Activity className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">실시간 상담 모니터링</span>
-            <span className="text-[9.5px] text-muted-foreground">상담 중 {onDuty} · 대기 7</span>
-            <button type="button" onClick={() => router.push("/realtime-monitoring")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
-          </div>
-          {MONITOR_FLAGS.map((f) => (
-            <div key={f.tag} role={f.live ? "button" : undefined} onClick={f.live ? () => router.push(`/realtime-monitoring?agent=${encodeURIComponent(f.agent)}`) : undefined} className={cn("flex items-center gap-2.5 px-5 py-2 text-left transition-colors", f.live && "cursor-pointer hover:bg-[#f7fafe]")}>
-              <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f3468] text-white"><Headset className="h-3.5 w-3.5" /><span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white bg-[#eef4fb] text-[7.5px] font-bold text-[#0f3468]">{f.agent.slice(0, 1)}</span></span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5"><span className="text-[12px] font-medium text-[#10233f]">{f.agent} 상담사</span><span className={cn("rounded-sm border px-1 py-px text-[8.5px] font-medium", f.live ? "border-[#f0c98a] bg-[#fff6e8] text-[#b27516]" : "border-[#dbe5f1] bg-[#f7fafe] text-[#0b4f91]")}>{f.tag}</span><span className="font-mono text-[9px] text-muted-foreground">{f.meta}</span></div>
-                <span className="block truncate text-[10px] text-muted-foreground">{f.info}</span>
-              </div>
-              <button type="button" onClick={(e) => { e.stopPropagation(); if (f.live) router.push(`/realtime-monitoring?agent=${encodeURIComponent(f.agent)}`) }} className={cn("flex shrink-0 items-center gap-0.5 rounded-md bg-[#0f3468] px-1.5 py-0.5 text-[9px] font-semibold text-white transition-all", f.live ? "cursor-pointer hover:bg-[#0b2547] hover:shadow-md hover:-translate-y-px active:translate-y-0 active:scale-95 ring-1 ring-[#2f6bb0]/0 hover:ring-[#2f6bb0]/40" : "cursor-default")}><Headphones className="h-2.5 w-2.5" /> 입장</button>
+        <div className="flex min-h-0 flex-1 flex-col divide-y divide-[#eef2f7]">
+          {/* ── 콜상담 운영 관리 ── */}
+          <div className="shrink-0 bg-[#f0f5fb] px-5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#6b7f99]">콜상담 운영 관리</div>
+          {/* 업무1 — 실시간 상담 모니터링 (상담사 3명 노출) */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eef2f7] bg-white px-5 py-2">
+              <Activity className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">실시간 상담 모니터링</span>
+              <span className="text-[9.5px] text-muted-foreground">상담 중 {onDuty} · 대기 7</span>
+              <button type="button" onClick={() => router.push("/realtime-monitoring")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
             </div>
-          ))}
+            <div className="min-h-0 flex-1 divide-y divide-[#eef2f7] overflow-y-auto">
+              {MONITOR_FLAGS.slice(0, 3).map((f) => (
+                <div key={f.tag} role={f.live ? "button" : undefined} onClick={f.live ? () => router.push(`/realtime-monitoring?agent=${encodeURIComponent(f.agent)}`) : undefined} className={cn("flex items-center gap-2.5 px-5 py-2 text-left transition-colors hover:bg-[#f7fafe]", f.live && "cursor-pointer")}>
+                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f3468] text-white"><Headset className="h-3.5 w-3.5" /><span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white bg-[#eef4fb] text-[7.5px] font-bold text-[#0f3468]">{f.agent.slice(0, 1)}</span></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5"><span className="text-[12px] font-medium text-[#10233f]">{f.agent} 상담사</span><span className={cn("rounded-sm border px-1 py-px text-[8.5px] font-medium", f.live ? "border-[#f0c98a] bg-[#fff6e8] text-[#b27516]" : "border-[#dbe5f1] bg-[#f7fafe] text-[#0b4f91]")}>{f.tag}</span><span className="font-mono text-[9px] text-muted-foreground">{f.meta}</span></div>
+                    <span className="block truncate text-[10px] text-muted-foreground">{f.info}</span>
+                  </div>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); if (f.live) router.push(`/realtime-monitoring?agent=${encodeURIComponent(f.agent)}`) }} className={cn("flex shrink-0 items-center gap-0.5 rounded-md bg-[#0f3468] px-1.5 py-0.5 text-[9px] font-semibold text-white transition-all", f.live ? "cursor-pointer hover:bg-[#0b2547] hover:shadow-md hover:-translate-y-px active:translate-y-0 active:scale-95 ring-1 ring-[#2f6bb0]/0 hover:ring-[#2f6bb0]/40" : "cursor-default")}><Headphones className="h-2.5 w-2.5" /> 입장</button>
+                </div>
+              ))}
+            </div>
+          </section>
 
-          <div className="flex items-center gap-1.5 border-b border-[#eef2f7] bg-[#fafcfe] px-5 pt-2.5 pb-1.5">
-            <ShieldCheck className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">상담 품질 검수</span>
-            <span className="text-[9.5px] text-muted-foreground">심각 {AUDIT_DIST[2].value} · 대기 {REVIEW_QUEUE.length}</span>
-            <button type="button" onClick={() => router.push("/post-consultation?task=audit-result")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
-          </div>
-          {REVIEW_QUEUE.filter((r) => r.severity === "심각").slice(0, 4).map((r) => (
-            <button key={r.cid} type="button" onClick={() => router.push(`/post-consultation?task=audit-result&id=${r.cid}`)} className="flex items-center gap-3 px-5 py-1.5 text-left transition-colors hover:bg-[#f7fafe]">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5"><span className="shrink-0 font-mono text-[10.5px] font-semibold text-[#10233f]">{r.cid}</span><span className="truncate text-[10px] text-muted-foreground">{r.type}</span></div>
-                <span className="mt-0.5 block text-[9.5px] text-muted-foreground">담당 <span className="font-medium text-[#33445c]">{r.agent}</span> · {r.time}</span>
-              </div>
-              <span className="shrink-0 rounded-sm border border-[#bcd3ef] bg-[#eef4fb] px-1.5 py-0.5 text-[8.5px] font-bold text-[#0f3468]">심각</span>
-            </button>
-          ))}
+          {/* 업무2 — 상담 품질 검수 (심각 4건 노출) */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eef2f7] bg-white px-5 py-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">상담 품질 검수</span>
+              <span className="text-[9.5px] text-muted-foreground">심각 {AUDIT_DIST[2].value} · 대기 {REVIEW_QUEUE.length}</span>
+              <button type="button" onClick={() => router.push("/post-consultation?task=audit-result")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
+            </div>
+            <div className="min-h-0 flex-1 divide-y divide-[#eef2f7] overflow-y-auto">
+              {REVIEW_QUEUE.filter((r) => r.severity === "심각").slice(0, 3).map((r) => (
+                <button key={r.cid} type="button" onClick={() => router.push(`/post-consultation?task=audit-result&id=${r.cid}`)} className="flex w-full items-center gap-3 px-5 py-1.5 text-left transition-colors hover:bg-[#f7fafe]">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-1.5"><span className="shrink-0 font-mono text-[10.5px] font-semibold text-[#10233f]">{r.cid}</span><span className="truncate text-[10px] text-muted-foreground">{r.type}</span></div>
+                    <span className="mt-0.5 block text-[9.5px] text-muted-foreground">담당 <span className="font-medium text-[#33445c]">{r.agent}</span> · {r.time}</span>
+                  </div>
+                  <span className="shrink-0 rounded-sm border border-[#bcd3ef] bg-[#eef4fb] px-1.5 py-0.5 text-[8.5px] font-bold text-[#0f3468]">심각</span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#cbd5e1]" />
+                </button>
+              ))}
+            </div>
+          </section>
 
-          {/* VoC 처리 관리 */}
-          <div className="bg-[#fafcff] px-5 pt-2.5 pb-1 text-[9px] font-bold uppercase tracking-wider text-[#0b4f91]/70">VoC 처리 관리</div>
+          {/* ── VoC 처리 관리 ── */}
+          <div className="shrink-0 bg-[#f0f5fb] px-5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#6b7f99]">VoC 처리 관리</div>
+          {/* 업무3 — 대외 민원 처리 */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eef2f7] bg-white px-5 py-2">
+              <Mail className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">대외 민원 처리</span>
+              <span className="text-[9.5px] text-muted-foreground">대기 {EXT_QUEUE.length} · 임박 {EXT_QUEUE.filter((e) => e.urgent).length}</span>
+              <button type="button" onClick={() => router.push("/external-complaint")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
+            </div>
+            <div className="min-h-0 flex-1 divide-y divide-[#eef2f7] overflow-y-auto">
+              {EXT_QUEUE.slice(0, 3).map((e) => (
+                <button key={e.id} type="button" onClick={() => router.push(e.voc ? `/external-complaint?voc=${e.voc}` : "/external-complaint")} className="flex w-full items-center gap-3 px-5 py-2 text-left transition-colors hover:bg-[#f7fafe]">
+                  <div className="min-w-0 flex-1">
+                    <span className="block font-mono text-[11.5px] font-bold text-[#10233f]">{e.id}</span>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground"><span className="font-medium text-[#33445c]">{e.customer}</span><span className="truncate">· {e.type}</span></div>
+                  </div>
+                  <span className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium", e.urgent ? "border-[#bcd3ef] bg-[#eef4fb] text-[#0f3468]" : "border-[#dbe5f1] bg-[#f7fafe] text-[#5b6b80]")}>SLA {e.sla}</span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#cbd5e1]" />
+                </button>
+              ))}
+            </div>
+          </section>
 
-          <div className="flex items-center gap-1.5 border-b border-[#eef2f7] bg-[#fafcfe] px-5 pt-2.5 pb-1.5">
-            <Mail className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">대외 민원 처리</span>
-            <span className="text-[9.5px] text-muted-foreground">대기 {EXT_QUEUE.length} · 임박 {EXT_QUEUE.filter((e) => e.urgent).length}</span>
-            <button type="button" onClick={() => router.push("/external-complaint")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
-          </div>
-          {EXT_QUEUE.slice(0, 3).map((e) => (
-            <button key={e.id} type="button" onClick={() => router.push(e.voc ? `/external-complaint?voc=${e.voc}` : "/external-complaint")} className="flex items-center gap-3 px-5 py-2 text-left transition-colors hover:bg-[#f7fafe]">
-              <div className="min-w-0 flex-1">
-                <span className="block font-mono text-[11.5px] font-bold text-[#10233f]">{e.id}</span>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground"><span className="font-medium text-[#33445c]">{e.customer}</span><span className="truncate">· {e.type}</span></div>
-              </div>
-              <span className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium", e.urgent ? "border-[#bcd3ef] bg-[#eef4fb] text-[#0f3468]" : "border-[#dbe5f1] bg-[#f7fafe] text-[#5b6b80]")}>SLA {e.sla}</span>
-            </button>
-          ))}
-
-          <div className="flex items-center gap-1.5 border-b border-[#eef2f7] bg-[#fafcfe] px-5 pt-2.5 pb-1.5">
-            <Building2 className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">민원 탐지 이관</span>
-            <span className="text-[9.5px] text-muted-foreground">미배정 {liveUnassigned}</span>
-            <button type="button" onClick={() => router.push("/complaint-detection")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
-          </div>
-          {ROUTE_QUEUE.slice(0, 6).map((r) => { const ChIcon = r.channel === "콜센터" ? PhoneIncoming : r.channel === "이메일" ? Mail : r.channel === "모바일 챗봇" ? MessageSquare : Gauge; return (
-            <button key={r.id} type="button" onClick={() => router.push("/complaint-detection")} className="flex items-center gap-3 px-5 py-2 text-left transition-colors hover:bg-[#f7fafe]">
-              <span className={cn("h-2 w-2 shrink-0 rounded-full", r.risk === "높음" ? "bg-[#0f3468]" : r.risk === "보통" ? "bg-[#5b8fc9]" : "bg-slate-300")} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5"><span className="text-[12px] font-medium text-[#10233f]">{r.customer}</span><span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground"><ChIcon className="h-2.5 w-2.5" />{r.channel}</span></div>
-                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{r.type} · <span className="text-[#0b4f91]">{r.dept}</span></span>
-              </div>
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#cbd5e1]" />
-            </button>
-          ) })}
+          {/* 업무4 — 민원 탐지 이관 */}
+          <section className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-[#eef2f7] bg-white px-5 py-2">
+              <Building2 className="h-3.5 w-3.5 text-[#0f3468]" /><span className="text-[11.5px] font-semibold text-[#10233f]">민원 탐지 이관</span>
+              <span className="text-[9.5px] text-muted-foreground">미배정 {liveUnassigned}</span>
+              <button type="button" onClick={() => router.push("/complaint-detection")} className="ml-auto text-[10px] font-medium text-[#0f3468] hover:underline">전체 →</button>
+            </div>
+            <div className="min-h-0 flex-1 divide-y divide-[#eef2f7] overflow-y-auto">
+              {ROUTE_QUEUE.slice(0, 3).map((r) => { const ChIcon = r.channel === "콜센터" ? PhoneIncoming : r.channel === "이메일" ? Mail : r.channel === "모바일 챗봇" ? MessageSquare : Gauge; return (
+                <button key={r.id} type="button" onClick={() => router.push("/complaint-detection")} className="flex w-full items-center gap-3 px-5 py-2 text-left transition-colors hover:bg-[#f7fafe]">
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", r.risk === "높음" ? "bg-[#0f3468]" : r.risk === "보통" ? "bg-[#5b8fc9]" : "bg-slate-300")} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5"><span className="text-[12px] font-medium text-[#10233f]">{r.customer}</span><span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground"><ChIcon className="h-2.5 w-2.5" />{r.channel}</span></div>
+                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{r.type} · <span className="text-[#0b4f91]">{r.dept}</span></span>
+                  </div>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#cbd5e1]" />
+                </button>
+              ) })}
+            </div>
+          </section>
         </div>
       </div>
     </div>

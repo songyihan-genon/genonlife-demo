@@ -14,10 +14,10 @@ import {
   ClipboardList, Sparkles, Pencil, Plus, ArrowRight, ArrowUpRight, ArrowDownRight,
   Ban, FileText, ListChecks, ChevronDown, ChevronRight, Check, Lock, Filter, Activity, BarChart3, Info,
   Phone, Inbox, FileWarning, Bell, Mail, ShieldAlert, Building2, Headset, X, MessageSquare, Send, Lightbulb, LayoutDashboard, TrendingUp,
-  Scale, Flame, Frown, Repeat, Tag, Megaphone, Landmark, Wallet,
+  Scale, Flame, Frown, Repeat, Tag, Megaphone, Landmark, Wallet, CalendarRange,
 } from "lucide-react"
 import {
-  ResponsiveContainer, AreaChart, Area, ComposedChart, Line, CartesianGrid, XAxis, YAxis,
+  ResponsiveContainer, AreaChart, Area, ComposedChart, Line, Bar, CartesianGrid, XAxis, YAxis,
   Tooltip as ReTooltip, RadialBarChart, RadialBar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   RadarChart as ReRadarChart, Radar, ScatterChart, Scatter, ZAxis, Cell, Treemap as ReTreemap, LabelList,
 } from "recharts"
@@ -1017,15 +1017,43 @@ const TOP_TYPES: { type: string; kws: string[]; n: number; pending: number; high
 // 적체율 = 대기 ÷ 배정 × 100 → 병목 ≈ 90%, 주의 ≥ 70%
 // 배정(inflow) = 금일 부서로 이관된 전사 VoC(합 ≈ 전사 VoC 3,650 · CH_STATS depts 합과 정합) / 완료(done) = 금일 처리 / 대기 = 배정 − 완료
 const DEPT_PROC: { dept: string; inflow: number; done: number }[] = [
-  { dept: "고객만족부", inflow: 990, done: 360 },     // 대기 630 · 64% 주의
-  { dept: "보상서비스부", inflow: 940, done: 180 },   // 대기 760 · 81% 병목
-  { dept: "수금관리부", inflow: 600, done: 490 },     // 대기 110 · 18% 정상
-  { dept: "준법감시부", inflow: 460, done: 120 },     // 대기 340 · 74% 주의
-  { dept: "계약관리부", inflow: 390, done: 250 },     // 대기 140 · 36% 정상
-  { dept: "디지털서비스부", inflow: 270, done: 225 }, // 대기 45 · 17% 정상
+  { dept: "고객만족부", inflow: 990, done: 928 },     // 미처리 62 · 6.3%
+  { dept: "보상서비스부", inflow: 940, done: 848 },   // 미처리 92 · 9.8% (최다)
+  { dept: "수금관리부", inflow: 600, done: 576 },     // 미처리 24 · 4.0%
+  { dept: "준법감시부", inflow: 460, done: 424 },     // 미처리 36 · 7.8%
+  { dept: "계약관리부", inflow: 390, done: 368 },     // 미처리 22 · 5.6%
+  { dept: "디지털서비스부", inflow: 270, done: 262 }, // 미처리 8 · 3.0%
 ]
+// 전일 기준 부서별 추가 통계 — SLA 준수율(%) / 평균 처리시간(리드타임) / 적체 전일 대비 증감(건)
+const DEPT_DAILY: Record<string, { sla: number; aht: string; dBacklog: number; reCx: number }> = {
+  고객만족부: { sla: 91, aht: "2.4h", dBacklog: 4, reCx: 5 },
+  보상서비스부: { sla: 86, aht: "6.1h", dBacklog: 9, reCx: 8 },
+  수금관리부: { sla: 97, aht: "1.3h", dBacklog: -3, reCx: 3 },
+  준법감시부: { sla: 88, aht: "7.2h", dBacklog: 2, reCx: 6 },
+  계약관리부: { sla: 93, aht: "2.9h", dBacklog: -2, reCx: 4 },
+  디지털서비스부: { sla: 98, aht: "0.8h", dBacklog: -4, reCx: 2 },
+}
+// 전일(어제) 부서별 배정·완료 — 오늘 대비 비교용 고스트 바
+const DEPT_PREV: Record<string, { inflow: number; done: number }> = {
+  고객만족부: { inflow: 880, done: 858 },   // 오늘 배정·완료 증가
+  보상서비스부: { inflow: 1030, done: 946 }, // 오늘 감소(어제 더 많았음)
+  수금관리부: { inflow: 512, done: 500 },    // 오늘 증가
+  준법감시부: { inflow: 528, done: 486 },    // 오늘 감소
+  계약관리부: { inflow: 322, done: 312 },    // 오늘 증가
+  디지털서비스부: { inflow: 330, done: 322 }, // 오늘 감소
+}
 // 부서별 금일 처리율(완료/배정) — 스코프(채널·센터)로 배정량이 바뀌어도 적체 패턴은 유지. 보상 병목.
 const DEPT_DONE_RATE: Record<string, number> = { 보상서비스부: 0.19, 고객만족부: 0.36, 수금관리부: 0.82, 준법감시부: 0.26, 계약관리부: 0.64, 디지털서비스부: 0.83 }
+// 처리 완료 건 — 부서별 처리 담당자 / 유형별 처리 결과 코멘트(상담 검수 결과 스타일 목업)
+const PROC_HANDLERS: Record<string, string> = { 보상서비스부: "김보상", 고객만족부: "이만족", 수금관리부: "박수금", 준법감시부: "정준법", 계약관리부: "최계약", 디지털서비스부: "한디지" }
+const PROC_COMMENT: Record<string, string> = {
+  "보험금 부지급": "약관상 부지급 사유를 근거 조항과 함께 안내하고, 재심사 요청 접수 후 처리 일정(영업일 5일)을 회신 완료. 고객 수용 확인.",
+  "해지·환급금": "경과기간별 환급률 산출 근거를 설명하고 차액 재정산 결과를 SMS로 통지 완료. 추가 이의 없음.",
+  "전산·인증 오류": "앱 인증 로그 확인 후 임시 인증 우회 처리, 정식 패치 예정일 안내 완료.",
+  "보장 범위 분쟁": "보장 제외 조항을 원문과 함께 안내하고 분쟁조정 신청 절차를 병행 안내 완료.",
+  "수금·이중출금": "이중 출금분 즉시 환불 처리하고 자동이체 계좌 정정 완료. 재발 방지 안내.",
+  "불완전판매": "모집 과정 녹취 확인 후 자율조정 기준에 따라 보상안을 안내하고 합의 완료.",
+}
 const UNASSIGNED_RATE = 0.35 // VoC 중 아직 부서 미배정(배정 대기) 비율 — 카드②′ 이관 진행률·카드③ 부서 배정량이 공유
 const procRate = (r: { inflow: number; done: number }) => Math.round((r.done / r.inflow) * 100)
 // 금일 전사 유형별 VoC 분해(고위험은 VoC 대비) — total=유형별 VoC, high=고위험 VoC. 합계가 전사 VoC와 정합(VoC 282 · 고위험 62).
@@ -1313,8 +1341,8 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
                   {(() => { const maxTot = Math.max(...rows.map((x) => x.low + x.mid + x.high), 1); return rows.map((r) => { const t = Math.max(1, r.low + r.mid + r.high); const Icon = r.Icon; return (
                     <div key={r.label} className="flex items-center gap-1.5 text-[9.5px]">
                       <span className="flex w-[64px] shrink-0 items-center gap-1 text-[#33445c]">{Icon ? <Icon className="h-2.5 w-2.5 shrink-0" /> : null}<span className="truncate">{r.label}</span></span>
-                      <div className="flex h-2 min-w-0 flex-1 items-center overflow-hidden rounded-full bg-[#eef2f7]">
-                        <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${(t / maxTot) * 100}%` }}>
+                      <div className="flex h-2 min-w-0 flex-1 items-center overflow-hidden rounded-[2px] bg-[#eef2f7]">
+                        <div className="flex h-full overflow-hidden rounded-[2px]" style={{ width: `${(t / maxTot) * 100}%` }}>
                           <div className="h-full" style={{ width: `${(r.low / t) * 100}%`, background: "#15c2a2" }} />
                           <div className="h-full" style={{ width: `${(r.mid / t) * 100}%`, background: "#5b8fc9" }} />
                           <div className="h-full" style={{ width: `${(r.high / t) * 100}%`, background: "#0f3468" }} />
@@ -1357,7 +1385,7 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
                     <div className="mt-0.5 text-[9px] text-muted-foreground">이관 완료</div>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-[#eef2f7]">{segs.map((s) => <div key={s.k} className="h-full" style={{ width: `${(s.n / total) * 100}%`, background: s.c }} />)}</div>
+                    <div className="flex h-2.5 w-full overflow-hidden rounded-[2px] bg-[#eef2f7]">{segs.map((s) => <div key={s.k} className="h-full" style={{ width: `${(s.n / total) * 100}%`, background: s.c }} />)}</div>
                     <div className="mt-1.5 space-y-0.5">
                       {[...segs].reverse().map((s) => <div key={s.k} className="flex items-center gap-1.5 text-[9.5px]"><span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: s.c }} /><span className="min-w-0 flex-1 truncate text-[#33445c]">{s.k}</span><b className="tabular-nums text-[#10233f]">{fmtN(s.n)}건</b><span className="w-8 text-right text-muted-foreground">{Math.round((s.n / total) * 100)}%</span></div>)}
                     </div>
@@ -1378,7 +1406,7 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
                   {sorted.map((r) => { const wait = r.inflow - r.done; const bl = Math.round((wait / r.inflow) * 100); const s = stat(bl); return (
                     <div key={r.dept} className="flex items-center gap-1.5 text-[9.5px]">
                       <span className="w-[68px] shrink-0 truncate font-semibold text-[#10233f]">{r.dept}</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#eef2f7]"><div className="h-full rounded-full" style={{ width: `${bl}%`, background: MINT }} /></div>
+                      <div className="h-2 flex-1 overflow-hidden rounded-[2px] bg-[#eef2f7]"><div className="h-full" style={{ width: `${bl}%`, background: MINT }} /></div>
                       <span className="w-[94px] shrink-0 text-right tabular-nums text-[#10233f]">대기 <b className="text-[#0f3468]">{fmtN(wait)}</b> <span className="text-[8.5px] text-muted-foreground">({fmtN(r.done)}/{fmtN(r.inflow)})</span></span>
                       <span className="inline-flex w-[28px] shrink-0 items-center justify-center rounded-sm py-px text-[8px] font-semibold" style={{ color: s.c, background: `${s.c}1a` }}>{s.k}</span>
                     </div>
@@ -1470,7 +1498,7 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
                       <td className="px-3 py-0.5">
                         <div className="flex items-center gap-1.5">
                           <span className="w-8 shrink-0 text-right font-semibold tabular-nums" style={{ color: TONE_HEX2[t] }}>{procRate(r)}%</span>
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#eef2f7]"><div className="h-full rounded-full" style={{ width: `${procRate(r)}%`, background: TONE_HEX2[t] }} /></div>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-[2px] bg-[#eef2f7]"><div className="h-full" style={{ width: `${procRate(r)}%`, background: TONE_HEX2[t] }} /></div>
                         </div>
                       </td>
                       <td className="px-2 py-0.5 text-center"><span className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[9.5px] font-medium" style={{ color: TONE_HEX2[t], background: `${TONE_HEX2[t]}1a` }}><span className="h-1.5 w-1.5 rounded-full" style={{ background: TONE_HEX2[t] }} />{procLabel(t)}</span></td>
@@ -1766,7 +1794,7 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
                         const state = i < activeIdx ? "done" : i === activeIdx ? "current" : "todo"
                         return (
                           <Fragment key={label}>
-                            {i > 0 ? <span className={cn("h-px flex-1 rounded-full transition-colors", i <= activeIdx ? "bg-[#0f3468]" : "bg-[#e2eaf4]")} /> : null}
+                            {i > 0 ? <span className={cn("h-px rounded-full transition-colors", i === 1 ? "flex-[0.5]" : "flex-[1.5]", i <= activeIdx ? "bg-[#0f3468]" : "bg-[#e2eaf4]")} /> : null}
                             <span className="relative inline-flex shrink-0 items-center gap-1.5">
                               <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold transition-all", state === "current" ? "bg-[#0f3468] text-white ring-4 ring-[#0f3468]/12" : state === "done" ? "bg-[#0f3468] text-white" : "border border-[#d4dbe6] bg-white text-[#b3bdca]")}>
                                 {state === "done" ? <Check className="h-3 w-3" /> : i + 1}
@@ -1872,6 +1900,21 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
                 </>) })()}
               </section>
 
+              {/* 처리 상세 — 처리 완료 건: 담당자 + 처리 결과 코멘트(상담 검수 결과 스타일) */}
+              {statusOf(d) === "처리 완료" ? (
+                <section className="rounded-lg border border-[#e2eaf4] bg-white p-2.5">
+                  <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold text-[#0b4f91]"><ClipboardList className="h-3 w-3" /> 처리 상세<span className="ml-auto inline-flex items-center gap-0.5 rounded-sm bg-[#e9faf4] px-1.5 py-0.5 text-[9px] font-medium text-[#0f766e]"><CheckCircle2 className="h-2.5 w-2.5" /> 처리 완료</span></div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+                    <span>담당 · <span className="font-semibold text-[#10233f]">{deptOf(d)} {PROC_HANDLERS[deptOf(d)] ? `${PROC_HANDLERS[deptOf(d)]} 담당자` : "담당자"}</span></span>
+                    <span>처리 유형 · <span className="font-medium text-[#27456b]">{typeOf(d)}</span></span>
+                  </div>
+                  <div className="mt-1.5 rounded-md border border-[#e6ebf2] bg-[#f8fafd] px-2.5 py-2">
+                    <div className="mb-1 text-[9px] font-semibold text-[#9aa6b6]">처리 담당자 코멘트</div>
+                    <p className="text-[10.5px] leading-[1.6] text-[#27456b]">{PROC_COMMENT[typeOf(d)] ?? "고객 요청사항 확인 후 처리 기준에 따라 안내·회신 완료. 추가 이의 없음."}</p>
+                  </div>
+                </section>
+              ) : null}
+
               {/* VoC 시스템 등록 */}
               <section className="rounded-lg border border-[#e2eaf4] bg-[#fbfdff] p-2.5">
                 {(() => { const assigned = !!alertMap[d.key] || statusOf(d) !== "분석 완료"; const registered = regMap[d.key] === "등록완료" || d.rawDetection?.reg === "등록완료"; return (<>
@@ -1961,11 +2004,12 @@ export function UnifiedVocAnalysis({ onProcess, fullTabs }: { onProcess: (vocId:
 /* ----------------------------- 관리자 콘솔 (탭 셸) ----------------------------- */
 
 /* ===================== 통계 대시보드 — recharts 시각화 ===================== */
-const VIZ_PAL = ["#0f3468", "#1a4f8f", "#2f8bff", "#3db0ff", "#15c2a2", "#0c8f78"]
+// 통일 팔레트 — 네이비 · 블루그레이 · 뮤트 블루 · 뮤트 민트/틸 (처리실적·기간추세 블루그레이 톤과 접점)
+const VIZ_PAL = ["#13355c", "#2f6aa8", "#5a8fbf", "#89abcf", "#17b39a", "#0c8f78"]
 // nivo 차트 — SSR 회피 위해 client-only 동적 로드
-const NivoFunnel = dynamic(() => import("./CompareFunnels").then((m) => m.NivoFunnel), { ssr: false, loading: () => <div className="h-[196px]" /> })
-const NivoSparkline = dynamic(() => import("./CompareFunnels").then((m) => m.NivoSparkline), { ssr: false, loading: () => <div className="h-[46px]" /> })
-const NivoPie = dynamic(() => import("./CompareFunnels").then((m) => m.NivoPie), { ssr: false, loading: () => <div className="h-[150px]" /> })
+const NivoFunnel = dynamic(() => import("./CompareFunnels").then((m) => m.NivoFunnel), { ssr: false, loading: () => <div className="h-[54px]" /> })
+const NivoSparkline = dynamic(() => import("./CompareFunnels").then((m) => m.NivoSparkline), { ssr: false, loading: () => <div className="h-[28px]" /> })
+const NivoPie = dynamic(() => import("./CompareFunnels").then((m) => m.NivoPie), { ssr: false, loading: () => <div className="h-[64px]" /> })
 const EChartSankey = dynamic(() => import("./CompareFunnels").then((m) => m.EChartSankey), { ssr: false, loading: () => <div className="h-[300px]" /> })
 const EChartTreemap = dynamic(() => import("./CompareFunnels").then((m) => m.EChartTreemap), { ssr: false, loading: () => <div className="h-[200px]" /> })
 const EChartBubble = dynamic(() => import("./CompareFunnels").then((m) => m.EChartBubble), { ssr: false, loading: () => <div className="h-[200px]" /> })
@@ -1975,10 +2019,13 @@ const EChartCauseBar = dynamic(() => import("./CompareFunnels").then((m) => m.EC
 // 공통 커스텀 툴팁
 function VizTip({ active, payload, label, unit }: any) {
   if (!active || !payload?.length) return null
+  // 내부용 밴드 계산 키(lo·band)는 툴팁에서 숨김
+  const rows = payload.filter((p: any) => p.dataKey !== "lo" && p.dataKey !== "band")
+  if (!rows.length) return null
   return (
     <div className="rounded-[4px] border border-[#e2eaf4] bg-white/95 px-2.5 py-1.5 shadow-lg backdrop-blur">
       {label != null ? <div className="mb-0.5 text-[10px] font-bold text-[#10233f]">{label}</div> : null}
-      {payload.map((p: any, i: number) => (
+      {rows.map((p: any, i: number) => (
         <div key={i} className="flex items-center gap-1.5 text-[10px]">
           <span className="h-2 w-2 rounded-sm" style={{ background: p.color || p.fill }} />
           <span className="text-muted-foreground">{p.name}</span>
@@ -2004,48 +2051,120 @@ function BubbleTip({ active, payload }: any) {
 }
 
 // 추이 — 평소(기대) 범위 밴드 + 전체 탐지 선 + 위험 선. 밴드 이탈 = 평소 대비 급증/급감
+// 운영시간(09~17시 시작, 9개 슬롯) 시간대 가중치 — 오전 완만 상승 → 점심 하락 → 오후 피크
+const TREND_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17]
+const TREND_HOUR_W = [0.6, 0.9, 1.15, 0.55, 0.85, 1.15, 1.3, 1.05, 0.75]
 function AreaTrend({ points }: { points: { x: string; total: number; high: number; lo?: number; hi?: number }[] }) {
   const hasBand = points.some((p) => p.hi != null)
-  const data = points.map((p) => ({ name: p.x, 전체: p.total, 위험: p.high, lo: p.lo ?? 0, band: p.hi != null && p.lo != null ? p.hi - p.lo : 0 }))
+  const data = points.map((p) => {
+    const row: Record<string, number | string> = { name: p.x, 전체: p.total, 위험: p.high, lo: p.lo ?? 0, band: p.hi != null && p.lo != null ? p.hi - p.lo : 0 }
+    // 요일별 운영시간 9개 시간대 바 (일 총량을 시간대 가중치로 분배)
+    const monMorning = p.x === "월" // 월요일 오전(9~11시) 일시 급증
+    TREND_HOURS.forEach((h, i) => {
+      const w = TREND_HOUR_W[i] * (monMorning && h >= 9 && h <= 11 ? 1.8 : 1)
+      row[`h${h}`] = Math.max(1, Math.round(p.total * w))
+    })
+    return row
+  })
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={data} margin={{ top: 12, right: 10, bottom: 0, left: -18 }}>
+      <ComposedChart data={data} margin={{ top: 12, right: 10, bottom: 0, left: -18 }} barGap={0} barCategoryGap="0%">
         <CartesianGrid strokeDasharray="3 4" stroke="#eef2f7" vertical={false} />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        {/* 라인 전용 point 스케일 축 — 양끝(첫·마지막 요일)까지 선이 닿도록 */}
+        <XAxis xAxisId="pt" dataKey="name" hide scale="point" padding={{ left: 0, right: 0 }} />
         <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} width={36} />
+        {/* 바(시간대)는 별도 우측 스케일 — 일별 라인과 독립 */}
+        <YAxis yAxisId="hr" hide domain={[0, "dataMax"]} />
         <ReTooltip content={<VizTip unit="건" />} />
+        {/* 요일별 운영시간(09~18시) 9개 시간대 바 — 라인 뒤 옅은 블루 */}
+        {TREND_HOURS.map((h) => (
+          <Bar key={h} yAxisId="hr" dataKey={`h${h}`} name={`${h}시`} fill="#c3d5ea" isAnimationActive={false} legendType="none" />
+        ))}
         {/* 평소 범위 밴드 — lo 바닥(투명) 위에 band(회색) 스택 */}
-        {hasBand ? <Area type="monotone" dataKey="lo" stackId="band" stroke="none" fill="none" isAnimationActive={false} legendType="none" /> : null}
-        {hasBand ? <Area type="monotone" dataKey="band" stackId="band" stroke="none" fill="#e8edf3" fillOpacity={0.9} isAnimationActive={false} legendType="none" /> : null}
-        <Line type="monotone" dataKey="전체" stroke="#0f3468" strokeWidth={1.8} dot={{ r: 2, fill: "#fff", stroke: "#0f3468", strokeWidth: 1.4 }} activeDot={{ r: 3.2 }} />
-        <Line type="monotone" dataKey="위험" stroke="#e2604f" strokeWidth={1.3} strokeDasharray="4 3" dot={{ r: 1.8, fill: "#e2604f" }} />
+        {hasBand ? <Area xAxisId="pt" type="monotone" dataKey="lo" stackId="band" stroke="none" fill="none" isAnimationActive={false} legendType="none" /> : null}
+        {hasBand ? <Area xAxisId="pt" type="monotone" dataKey="band" stackId="band" stroke="none" fill="#e8edf3" fillOpacity={0.6} isAnimationActive={false} legendType="none" /> : null}
+        <Line xAxisId="pt" type="monotone" dataKey="전체" stroke="#0f3468" strokeWidth={1.8} dot={{ r: 2, fill: "#fff", stroke: "#0f3468", strokeWidth: 1.4 }} activeDot={{ r: 3.2 }} />
+        <Line xAxisId="pt" type="monotone" dataKey="위험" stroke="#e2604f" strokeWidth={1.3} strokeDasharray="4 3" dot={{ r: 1.8, fill: "#e2604f" }} />
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
 // 게이지 — 동심 RadialBar
+// 부서 막대 높이 — 실제 건수 정비례 대신 구간별 매핑(고값 800~900대 차이 부각 · 중값 200~400대 중간 · 미처리 소량도 가시)
+// 최고 ~78%로 상단에 증감 라벨 헤드룸 확보
+function deptBarH(v: number) {
+  if (v >= 600) return 50 + (Math.min(v, 1000) - 600) / 400 * 28 // 600→50%, 1000→78%
+  if (v >= 200) return 30 + (v - 200) / 400 * 20                 // 200→30%, 600→50%
+  return 10 + (v / 200) * 20                                     // 0→10%, 200→30%
+}
+const deltaMark = (d: number) => `${d >= 0 ? "▲" : "▼"}${Math.abs(d)}`
+// 부서 1칸 = 세로 막대(오늘 + 전일 고스트) · 각 바 위 전일 대비 증감 · SLA·평균처리 보조
+function DeptMiniChart({ name, rate, sla, aht, bars }: { name: string; rate: number; sla: number; aht: string; bars: { label: string; value: number; color: string; prev?: number }[] }) {
+  return (
+    <div className="rounded-[4px] border border-[#eef2f7] p-2">
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className="min-w-0 truncate text-[9.5px] font-bold text-[#10233f]">{name}</span>
+        <span className="ml-auto shrink-0 rounded-full bg-[#f4f6fa] px-1 py-0 text-[7.5px] font-bold tabular-nums text-[#5b6b80]">처리율 {rate}%</span>
+      </div>
+      {/* 배정·완료·미처리 세로 막대 — 오늘(앞·좌) + 전일 고스트(뒤·우로 살짝 밀림) · 증감은 더 높은 바 위에 */}
+      <div className="mt-1 flex gap-2" style={{ height: 52 }}>
+        {bars.map((b) => {
+          const topH = Math.max(deptBarH(b.value), b.prev != null ? deptBarH(b.prev) : 0)
+          const d = b.prev != null ? b.value - b.prev : null
+          return (
+            <div key={b.label} className="flex flex-1 items-end justify-center">
+              <div className="relative h-full" style={{ width: 20 }}>
+                {b.prev != null ? (
+                  <div className="absolute bottom-0 right-0 w-[13px] bg-[#c0cbdb]" style={{ height: `${deptBarH(b.prev)}%` }} title={`전일 ${fmtN(b.prev)}건`} />
+                ) : null}
+                <div className="absolute bottom-0 left-0 w-[13px]" style={{ height: `${deptBarH(b.value)}%`, background: b.color }} title={`오늘 ${fmtN(b.value)}건`} />
+                {d != null ? (
+                  <div className="absolute inset-x-0 text-center text-[7.5px] font-bold leading-none tabular-nums" style={{ bottom: `calc(${topH}% + 3px)`, color: d >= 0 ? "#c2452f" : "#0c8f78" }}>{deltaMark(d)}</div>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-0.5 flex gap-2">
+        {bars.map((b) => (
+          <div key={b.label} className="flex-1 text-center leading-tight">
+            <div className="text-[9px] font-bold tabular-nums text-[#10233f]">{fmtN(b.value)}<span className="text-[7px] font-normal text-muted-foreground">건</span></div>
+            <div className="text-[7.5px] text-muted-foreground">{b.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 space-y-0.5 border-t border-[#eef2f7] pt-1 text-[8px] text-muted-foreground">
+        <div className="flex items-center justify-between"><span>SLA 준수</span><b className="tabular-nums text-[#10233f]">{sla}%</b></div>
+        <div className="flex items-center justify-between"><span>평균 처리시간</span><b className="tabular-nums text-[#10233f]">{aht}</b></div>
+      </div>
+    </div>
+  )
+}
 function GaugeRing({ metrics }: { metrics: { label: string; value: number; max: number; unit: string; color: string }[] }) {
   const data = metrics.map((m) => ({ name: m.label, value: Math.round((m.value / m.max) * 100), fill: m.color }))
   return (
-    <div className="flex w-full flex-col items-center gap-1.5">
-      <div className="relative h-[124px] w-full">
+    <div className="flex w-full items-center justify-center gap-4">
+      <div className="relative h-[116px] w-[116px] shrink-0">
         <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart innerRadius="42%" outerRadius="100%" data={data} startAngle={90} endAngle={-270} barSize={9}>
+          <RadialBarChart innerRadius="62%" outerRadius="102%" data={data} startAngle={90} endAngle={-270} barSize={12}>
             <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-            <RadialBar background={{ fill: "#eef2f7" }} dataKey="value" cornerRadius={6} />
+            <RadialBar background={{ fill: "#f0f3f8" }} dataKey="value" cornerRadius={0} />
           </RadialBarChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[19px] font-bold leading-none tabular-nums text-[#10233f]">{metrics[0].value}<span className="text-[10px] font-semibold text-muted-foreground">{metrics[0].unit}</span></span>
-          <span className="mt-0.5 text-[8.5px] text-muted-foreground">{metrics[0].label}</span>
+          <span className="text-[19px] font-extrabold leading-none tabular-nums" style={{ color: metrics[0].color }}>{metrics[0].value}<span className="text-[9px] font-bold text-muted-foreground">{metrics[0].unit}</span></span>
+          <span className="mt-0.5 text-[8px] font-medium text-muted-foreground">{metrics[0].label}</span>
         </div>
       </div>
-      <div className="grid w-full grid-cols-3 gap-1">
+      <div className="space-y-1">
         {metrics.map((m) => (
-          <div key={m.label} className="rounded-[3px] bg-[#f7fafe] px-1.5 py-1 text-center">
-            <div className="flex items-center justify-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: m.color }} /><span className="text-[8px] text-muted-foreground">{m.label}</span></div>
-            <div className="text-[11px] font-bold tabular-nums text-[#10233f]">{m.value}<span className="text-[7.5px] font-normal text-muted-foreground">{m.unit}</span></div>
+          <div key={m.label} className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.color }} />
+            <span className="w-[48px] text-[8.5px] text-[#5b6b80]">{m.label}</span>
+            <span className="w-8 text-right tabular-nums"><b className="text-[11px] text-[#10233f]">{m.value}</b><span className="text-[7.5px] font-normal text-muted-foreground">{m.unit}</span></span>
           </div>
         ))}
       </div>
@@ -2090,28 +2209,35 @@ function BubbleChart({ items }: { items: { label: string; x: number; y: number; 
 }
 
 
-// 히트맵 — 요일 × 시간대 인입 강도
+// 히트맵 — 가로: 요일 / 세로: 시간대. 색은 흰색 위 opacity(회색기) 대신 라이트네이비→딥네이비 톤 램프
+const HEAT_CELL = 20
 function Heatmap({ days, hours, val, color }: { days: string[]; hours: number[]; val: (d: number, h: number) => number; color: string }) {
   const max = Math.max(...days.flatMap((_, di) => hours.map((h) => val(di, h)))) || 1
+  // 3단 램프: 낮음=밝은 하늘 → 중간=선명한 블루 → 높음=딥 네이비(color). 단색 opacity의 안개 느낌 제거
+  const lo = [226, 234, 246]   // #e2eaf6 연한 네이비
+  const mid = [45, 88, 148]    // #2d5894 중간 네이비 블루
+  const hi = [parseInt(color.slice(1, 3), 16), parseInt(color.slice(3, 5), 16), parseInt(color.slice(5, 7), 16)]
+  const lerp = (a: number[], b: number[], t: number) => a.map((x, i) => Math.round(x + (b[i] - x) * t))
+  const ramp = (t: number) => { const c = t < 0.5 ? lerp(lo, mid, t / 0.5) : lerp(mid, hi, (t - 0.5) / 0.5); return `rgb(${c[0]},${c[1]},${c[2]})` }
+  const cellFor = (v: number) => ramp(Math.pow(v / max, 0.85))
+  const colW = `${HEAT_CELL}px`
   return (
-    <div className="w-full">
-      <div className="flex">
-        <div className="w-7 shrink-0" />
-        <div className="grid flex-1 gap-[3px]" style={{ gridTemplateColumns: `repeat(${hours.length}, minmax(0,1fr))` }}>
-          {hours.map((h) => <div key={h} className="text-center text-[7.5px] text-muted-foreground">{h}</div>)}
-        </div>
+    <div className="mx-auto w-fit">
+      {/* 헤더 — 요일(가로) */}
+      <div className="flex gap-[3px]">
+        <div className="shrink-0" style={{ width: 22 }} />
+        {days.map((d) => <div key={d} className="text-center text-[8.5px] font-semibold text-[#5b6b80]" style={{ width: colW }}>{d}</div>)}
       </div>
-      {days.map((d, di) => (
-        <div key={d} className="mt-[3px] flex items-center">
-          <div className="w-7 shrink-0 text-[8.5px] font-semibold text-[#5b6b80]">{d}</div>
-          <div className="grid flex-1 gap-[3px]" style={{ gridTemplateColumns: `repeat(${hours.length}, minmax(0,1fr))` }}>
-            {hours.map((h) => { const v = val(di, h), o = 0.08 + (v / max) * 0.92; return (
-              <div key={h} className="aspect-square rounded-[3px] transition-transform hover:scale-110" style={{ background: color, opacity: o }} title={`${d} ${h}시 · ${v}건`} />
-            ) })}
-          </div>
+      {/* 행 — 시간대(세로) */}
+      {hours.map((h) => (
+        <div key={h} className="mt-[3px] flex items-center gap-[3px]">
+          <div className="shrink-0 pr-1 text-right text-[8px] text-muted-foreground" style={{ width: 22 }}>{h}</div>
+          {days.map((d, di) => { const v = val(di, h); return (
+            <div key={d} className="rounded-[3px] transition-transform hover:scale-110" style={{ width: HEAT_CELL, height: HEAT_CELL, background: cellFor(v) }} title={`${d} ${h}시 · ${v}건`} />
+          ) })}
         </div>
       ))}
-      <div className="mt-2 flex items-center justify-end gap-1.5 text-[8px] text-muted-foreground">낮음<div className="flex gap-[2px]">{[0.15, 0.4, 0.65, 0.9].map((o) => <span key={o} className="h-2.5 w-2.5 rounded-[2px]" style={{ background: color, opacity: o }} />)}</div>높음</div>
+      <div className="mt-2 flex items-center justify-end gap-1.5 text-[8px] text-muted-foreground">낮음<div className="flex gap-[2px]">{[0.12, 0.4, 0.68, 1].map((t) => <span key={t} className="h-2.5 w-2.5 rounded-[2px]" style={{ background: ramp(t) }} />)}</div>높음</div>
     </div>
   )
 }
@@ -2146,23 +2272,115 @@ function Treemap({ items }: { items: { label: string; value: number }[] }) {
 
 // 시각화용 데이터 (전사 목업)
 const RADAR_AXES = ["보험금", "해지·환급", "전산·인증", "응대·서비스", "수금", "불완전판매"]
-const RADAR_SERIES = [
-  { name: "콜센터", color: "#0f3468", values: [82, 64, 38, 72, 50, 44] },
-  { name: "디지털(앱·이메일)", color: "#15c2a2", values: [48, 56, 80, 40, 34, 58] },
+// 고객 성별 민원 프로파일 — 유형별 상대 강도(0–100)
+const RADAR_GENDER = [
+  { name: "남성", color: "#2f6aa8", values: [78, 52, 62, 58, 66, 40] },
+  { name: "여성", color: "#17b39a", values: [60, 74, 44, 72, 48, 58] },
+]
+// 고객 나이대 민원 프로파일 — 3구간 묶음, 유형별 상대 강도(0–100)
+const RADAR_AGE = [
+  { name: "20~30대", color: "#5a8fbf", values: [40, 50, 78, 60, 36, 64] },
+  { name: "40~50대", color: "#2f6aa8", values: [72, 66, 48, 58, 62, 48] },
+  { name: "60~70대", color: "#0c8f78", values: [88, 52, 30, 66, 64, 36] },
+]
+// 상품별 민원 점유율 — 트리맵(생명·건강·저축 등 상품군 세분화)
+const PRODUCT_MIX: { label: string; value: number }[] = [
+  { label: "종신보험", value: 1180 },
+  { label: "실손의료보험", value: 960 },
+  { label: "암보험", value: 720 },
+  { label: "변액보험", value: 640 },
+  { label: "연금보험", value: 520 },
+  { label: "저축보험", value: 430 },
+  { label: "정기보험", value: 350 },
+  { label: "CI보험", value: 300 },
+  { label: "어린이보험", value: 240 },
+  { label: "치아보험", value: 180 },
+  { label: "간병보험", value: 150 },
 ]
 const HEAT_DAYS = ["월", "화", "수", "목", "금", "토", "일"]
-const HEAT_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+const HEAT_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+// 요일별 인입량 가중(월~일) — 금요일 최고, 월요일 높음, 주말 낮음
+const HEAT_DAY_W = [0.96, 0.82, 0.76, 0.9, 1.2, 0.44, 0.32]
+// 요일별 오후 피크 시간 이동(시) — 후반부로 갈수록 늦은 피크
+const HEAT_PM_SHIFT = [-0.8, 0.0, 0.3, 0.7, 1.1, 1.4, 1.6]
 const heatVal = (di: number, h: number) => {
-  const weekday = di < 5
-  const peak = Math.exp(-Math.pow(h - 11, 2) / 8) + Math.exp(-Math.pow(h - 15.5, 2) / 7) * 0.95
-  const lunch = h === 12 || h === 13 ? 0.62 : 1
-  const base = weekday ? 100 : 38
-  return Math.round(base * peak * lunch * (weekday ? 1 : 0.85))
+  const amC = 11 + di * 0.12 // 오전 피크 소폭 이동
+  const pmC = 15.3 + (HEAT_PM_SHIFT[di] ?? 0) // 오후 피크 요일별 이동
+  const monAmSurge = di === 0 ? Math.exp(-Math.pow(h - 9.8, 2) / 2.6) * 0.85 : 0 // 월요일 오전 일시 급증
+  const peak = Math.exp(-Math.pow(h - amC, 2) / 6.5) + Math.exp(-Math.pow(h - pmC, 2) / 5.5) * 1.05 + monAmSurge
+  const lunch = h === 12 || h === 13 ? 0.5 : 1
+  // 셀별 결정적 텍스처(요일·시간 해시) — 같은 시간대라도 요일마다 미세 변주
+  const seed = Math.sin(di * 12.9898 + h * 78.233) * 43758.5453
+  const jitter = 0.82 + (seed - Math.floor(seed)) * 0.36 // 0.82~1.18
+  const base = 100 * (HEAT_DAY_W[di] ?? 0.5)
+  return Math.max(0, Math.round(base * peak * lunch * jitter))
 }
 
+// 통계 대시보드 섹션 헤더 — 아이콘 칩 + 제목 + 부제 + 헤어라인(일관된 위계)
+function StatSection({ icon: Icon, title, sub }: { icon: typeof BarChart3; title: string; sub: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[#e2edfb] text-[#1b5fb0]"><Icon className="h-3.5 w-3.5" /></span>
+      <span className="text-[11.5px] font-bold tracking-tight text-[#10233f]">{title}</span>
+      <span className="text-[9px] text-muted-foreground">{sub}</span>
+      <span className="ml-1 h-px flex-1 bg-[#cdd9e8]" />
+    </div>
+  )
+}
+// 섹션별 AI 종합 분석 카드 — 섹션 오른쪽, 포스트잇처럼 컴팩트(하늘색 톤). 맨 위 결론 한 줄 + 근거 불릿
+function InsightCard({ title, summary, items }: { title: string; summary: string; items: string[] }) {
+  return (
+    <aside className="flex min-h-[230px] w-[230px] shrink-0 self-start flex-col rounded-[4px] border border-[#cfe0f4] bg-[#eef5fd] p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)]">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className="flex h-4 w-4 items-center justify-center rounded-[4px] bg-[#dbeafe] text-[#1b5fb0]"><Sparkles className="h-2.5 w-2.5" /></span>
+        <span className="text-[9.5px] font-bold text-[#1b5fb0]">{title} · AI 종합 분석</span>
+      </div>
+      <div className="mb-2 rounded-[3px] bg-white/70 px-2 py-1.5 text-[11px] font-bold leading-snug text-[#0f3468]">{summary}</div>
+      <ul className="space-y-1.5 text-[9.5px] leading-relaxed text-[#4a5568]">
+        {items.map((t, i) => <li key={i} className="flex gap-1.5"><span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-[#8aa6c6]" /><span>{t}</span></li>)}
+      </ul>
+    </aside>
+  )
+}
+// 접이식 섹션 헤더(<summary>용) — ④⑤ 탐색용 섹션에서 사용
+function CollapsibleSectionHeader({ icon: Icon, title, sub }: { icon: typeof BarChart3; title: string; sub: string }) {
+  return (
+    <summary className="flex cursor-pointer list-none items-center gap-2 pt-1 [&::-webkit-details-marker]:hidden">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[#e2edfb] text-[#1b5fb0]"><Icon className="h-3.5 w-3.5" /></span>
+      <span className="text-[11.5px] font-bold tracking-tight text-[#10233f]">{title}</span>
+      <span className="text-[9px] text-muted-foreground">{sub}</span>
+      <span className="ml-1 h-px flex-1 bg-[#cdd9e8]" />
+      <ChevronDown className="chevron h-4 w-4 shrink-0 text-muted-foreground transition-transform" />
+    </summary>
+  )
+}
+// 도넛 + 우측 범례 한 세트 — VoC 구성(유형별 · 위험도별)
+function DonutWithLegend({ caption, segments, centerSub }: { caption: string; segments: { label: string; value: number; color: string }[]; centerSub: string }) {
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1
+  return (
+    <div className="flex items-center gap-2.5">
+      <NivoPie segments={segments} centerTop={`${fmtN(total)}건`} centerSub={centerSub} size={104} />
+      <div className="min-w-0">
+        <div className="mb-1 text-[9px] font-semibold text-[#5b6b80]">{caption}</div>
+        <div className="space-y-1">
+          {segments.map((s) => (
+            <div key={s.label} className="flex items-center gap-1.5 text-[9.5px] leading-none">
+              <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: s.color }} />
+              <span className="w-[52px] shrink-0 text-[#5b6b80]">{s.label}</span>
+              <b className="tabular-nums text-[#10233f]">{fmtN(s.value)}건</b>
+              <span className="tabular-nums text-muted-foreground">{Math.round((s.value / total) * 100)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 // 통계 대시보드 — 전사 VoC 통계/시각화 모음. 각 카드 → VoC 리포트 / 관리자 메인에 추가 가능
 function StatsDashboard() {
-  const [donutBy, setDonutBy] = useState<"product" | "dept">("product")
+  const [statPeriod, setStatPeriod] = useState<"today" | "week" | "month" | "custom">("today")
+  const [statFrom, setStatFrom] = useState("2026-06-01")
+  const [statTo, setStatTo] = useState("2026-06-17")
   const [pinReport, setPinReport] = useState<Record<string, boolean>>({})
   const [pinMain, setPinMain] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<string | null>(null)
@@ -2178,16 +2396,16 @@ function StatsDashboard() {
   const acts = (id: string, label: string) => {
     const r = pinReport[id], m = pinMain[id]
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button type="button" title="VoC 리포트에 추가" onClick={() => pin("report", id, label)}
-          className={cn("inline-flex items-center gap-1 rounded-[3px] border px-1.5 py-[3px] text-[9.5px] font-semibold transition-colors",
+          className={cn("inline-flex items-center gap-0.5 rounded-[3px] border px-1 py-[1px] text-[8px] font-semibold transition-colors",
             r ? "border-[#bcd3ef] bg-[#eef4fb] text-[#0f3468]" : "border-[#e2eaf4] bg-white text-[#5b6b80] hover:border-[#bcd3ef] hover:text-[#0f3468]")}>
-          {r ? <CheckCircle2 className="h-3 w-3" /> : <FileText className="h-3 w-3" />}{r ? "리포트 추가됨" : "리포트에 추가"}
+          {r ? <CheckCircle2 className="h-2.5 w-2.5" /> : <FileText className="h-2.5 w-2.5" />}{r ? "리포트 추가됨" : "리포트"}
         </button>
         <button type="button" title="관리자 메인에 추가" onClick={() => pin("main", id, label)}
-          className={cn("inline-flex items-center gap-1 rounded-[3px] border px-1.5 py-[3px] text-[9.5px] font-semibold transition-colors",
+          className={cn("inline-flex items-center gap-0.5 rounded-[3px] border px-1 py-[1px] text-[8px] font-semibold transition-colors",
             m ? "border-[#9fe0d3] bg-[#e8faf5] text-[#0c8f78]" : "border-[#e2eaf4] bg-white text-[#5b6b80] hover:border-[#9fe0d3] hover:text-[#0c8f78]")}>
-          {m ? <CheckCircle2 className="h-3 w-3" /> : <LayoutDashboard className="h-3 w-3" />}{m ? "메인 추가됨" : "메인에 추가"}
+          {m ? <CheckCircle2 className="h-2.5 w-2.5" /> : <LayoutDashboard className="h-2.5 w-2.5" />}{m ? "메인 추가됨" : "메인"}
         </button>
       </div>
     )
@@ -2195,18 +2413,20 @@ function StatsDashboard() {
   // KPI 밴드 — 전사 실시간 집계
   const sum = (f: (s: typeof CH_STATS[string]) => number) => Object.values(CH_STATS).reduce((a, s) => a + f(s), 0)
   const totalAll = sum((s) => s.total), compAll = sum((s) => s.complaint), potAll = sum((s) => s.potential), highAll = sum((s) => s.high)
+  const midAll = sum((s) => s.mid), lowAll = sum((s) => s.low)
   const backlog = DEPT_PROC.reduce((a, r) => a + (r.inflow - r.done), 0)
   const extAgency = CH_STATS["대외기관 민원"]?.total ?? 0
   const vocAll = compAll + potAll + extAgency // 전체 VoC = 불만VoC + 잠재VoC + 대외민원
   const overallRate = Math.round((DEPT_PROC.reduce((a, r) => a + r.done, 0) / DEPT_PROC.reduce((a, r) => a + r.inflow, 0)) * 100)
   // KPI 퍼널 — 전체 문의 → 전체 VoC → 불만/잠재/대외 → 위험 높음. 증감 기준 = 전일 동시간 대비
-  const KPIS: { label: string; value: number; unit: string; delta: number; accent: string; spark: number[] }[] = [
-    { label: "전체 문의", value: totalAll, unit: "건", delta: 5, accent: "#0f3468", spark: [58, 118, 74, 130, 120, 96, 60] }, // 오전·오후 쌍봉
-    { label: "전체 VoC (불만+잠재+대외)", value: vocAll, unit: "건", delta: 6, accent: "#1a4f8f", spark: [20, 30, 28, 40, 55, 50, 34] }, // 오후 집중
-    { label: "불만VoC", value: compAll, unit: "건", delta: 4, accent: "#2f8bff", spark: [10, 28, 19, 16, 14, 12, 9] }, // 오전 급증
-    { label: "잠재VoC", value: potAll, unit: "건", delta: 9, accent: "#3db0ff", spark: [11, 15, 19, 23, 27, 29, 27] }, // 완만 상승
-    { label: "대외민원", value: extAgency, unit: "건", delta: 3, accent: "#0c8f78", spark: [2, 2, 3, 9, 4, 3, 2] }, // 단발 스파이크
-    { label: "위험 높음", value: highAll, unit: "건", delta: 12, accent: "#1e477e", spark: [4, 7, 8, 10, 13, 17, 16] }, // 마감 직전 상승
+  // spark: 금일 시간대 추이 / sparkBase: 저번달 동일 시간대 평균(회색 배경, 차이 비교용)
+  const KPIS: { label: string; value: number; unit: string; delta: number; accent: string; spark: number[]; sparkBase: number[]; icon: typeof BarChart3 }[] = [
+    { label: "전체 문의", value: totalAll, unit: "건", delta: 5, accent: "#0f3468", icon: Inbox, spark: [58, 118, 74, 130, 120, 96, 60], sparkBase: [40, 82, 52, 91, 84, 67, 42] }, // 오전·오후 쌍봉
+    { label: "전체 VoC (불만+잠재+대외)", value: vocAll, unit: "건", delta: 6, accent: "#1a4f8f", icon: MessageSquare, spark: [20, 30, 28, 40, 55, 50, 34], sparkBase: [14, 21, 20, 28, 38, 35, 24] }, // 오후 집중
+    { label: "불만VoC", value: compAll, unit: "건", delta: 4, accent: "#2f6aa8", icon: ShieldAlert, spark: [10, 28, 19, 16, 14, 12, 9], sparkBase: [7, 20, 13, 11, 10, 8, 6] }, // 오전 급증
+    { label: "잠재VoC", value: potAll, unit: "건", delta: 9, accent: "#5a8fbf", icon: FileWarning, spark: [11, 15, 19, 23, 27, 29, 27], sparkBase: [8, 10, 13, 16, 19, 20, 19] }, // 완만 상승
+    { label: "대외민원", value: extAgency, unit: "건", delta: 3, accent: "#0c8f78", icon: Landmark, spark: [2, 2, 3, 9, 4, 3, 2], sparkBase: [1, 1, 2, 6, 3, 2, 1] }, // 단발 스파이크
+    { label: "위험 높음", value: highAll, unit: "건", delta: 12, accent: "#1e477e", icon: Flame, spark: [4, 7, 8, 10, 13, 17, 16], sparkBase: [3, 5, 6, 7, 9, 12, 11] }, // 마감 직전 상승
   ]
   // 핵심 운영 게이지
   const GAUGE = [
@@ -2214,28 +2434,54 @@ function StatsDashboard() {
     { label: "평균 위험도", value: 54, max: 100, unit: "점", color: "#2f8bff" },
     { label: "SLA 준수", value: 88, max: 100, unit: "%", color: "#15c2a2" },
   ]
+  // 전일 처리 실적 집계 (부서 데이터 기반, 처리량 가중 평균)
+  const dAssigned = DEPT_PROC.reduce((a, r) => a + r.inflow, 0)
+  const dDone = DEPT_PROC.reduce((a, r) => a + r.done, 0)
+  const dRate = Math.round((dDone / dAssigned) * 100)
+  const dBacklog = dAssigned - dDone
+  const dBacklogDelta = DEPT_PROC.reduce((a, r) => a + (DEPT_DAILY[r.dept]?.dBacklog ?? 0), 0)
+  const dSla = Math.round(DEPT_PROC.reduce((a, r) => a + (DEPT_DAILY[r.dept]?.sla ?? 0) * r.done, 0) / dDone)
+  const dAht = (DEPT_PROC.reduce((a, r) => a + parseFloat(DEPT_DAILY[r.dept]?.aht ?? "0") * r.done, 0) / dDone).toFixed(1)
+  const dQuality = Math.round(100 - DEPT_PROC.reduce((a, r) => a + (DEPT_DAILY[r.dept]?.reCx ?? 0) * r.done, 0) / dDone)
+  // 과녁(링) 게이지 — 전부 '높을수록 좋은 %' 달성률 지표
+  const DAILY_GAUGE = [
+    { label: "처리율", value: dRate, max: 100, unit: "%", color: "#13355c" },
+    { label: "SLA 준수", value: dSla, max: 100, unit: "%", color: "#4a6f9e" },
+    { label: "처리 품질", value: dQuality, max: 100, unit: "%", color: "#8aa6c6" },
+  ]
+  const dReComplaint = Math.round(DEPT_PROC.reduce((a, r) => a + ((DEPT_DAILY[r.dept]?.reCx ?? 0) / 100) * r.done, 0))
+  const dSlaViol = Math.round(DEPT_PROC.reduce((a, r) => a + ((100 - (DEPT_DAILY[r.dept]?.sla ?? 0)) / 100) * r.done, 0))
+  // 링 게이지 하단 보조 — 하루(전일) 절대 실적. 적체 증감은 전전일 대비
+  const DAILY_ABS: { label: string; value: string; unit: string; delta?: number }[] = [
+    { label: "배정", value: fmtN(dAssigned), unit: "건" },
+    { label: "처리 완료", value: fmtN(dDone), unit: "건" },
+    { label: "적체", value: fmtN(dBacklog), unit: "건", delta: dBacklogDelta },
+    { label: "평균 처리", value: dAht, unit: "h" },
+    { label: "재접수", value: fmtN(dReComplaint), unit: "건" },
+    { label: "SLA 위반", value: fmtN(dSlaViol), unit: "건" },
+  ]
   // 인입 → 처리 퍼널 (전체 문의 ⊃ VoC ⊃ 위험 높음 ⊃ 처리 대기) — 색은 깔때기 연속 그라데이션 위치에 맞춰 샘플링
+  // 각 단계는 앞 단계의 부분집합 — 마지막은 '위험 높음 중 아직 미처리(적체)' 건만
+  const highBacklog = Math.round(highAll * 0.39)
   const FUNNEL_RAW: { k: string; v: number; c: string }[] = [
-    { k: "전체 문의", v: totalAll, c: "#15417c" },
-    { k: "전체 VoC (불만+잠재+대외)", v: vocAll, c: "#215ba4" },
-    { k: "위험 높음", v: highAll, c: "#217dad" },
-    { k: "처리 대기", v: backlog, c: "#1ca3a8" },
+    { k: "전체 문의", v: totalAll, c: "#13355c" },
+    { k: "전체 VoC", v: vocAll, c: "#2f6aa8" },
+    { k: "고위험건", v: highAll, c: "#4a89b8" },
+    { k: "고위험건 적체", v: highBacklog, c: "#17b39a" },
   ]
   const FUNNEL = FUNNEL_RAW.map((s) => ({ name: `${s.k} · ${Math.round((s.v / FUNNEL_RAW[0].v) * 100)}%`, value: s.v, fill: s.c }))
   // 유형 포지셔닝 버블 — 건수 × 위험 비중 × 처리 대기
   const BUBBLES = TOP_TYPES.map((t, i) => ({ label: t.type, x: t.n, y: Math.round((t.high / t.n) * 100), r: t.pending, color: VIZ_PAL[i % VIZ_PAL.length] }))
   // 트리맵/도넛 데이터 — 상품 유형 / 부서
-  const treeData = (donutBy === "product"
-    ? PERIOD_DATA["30d"].products.map((p) => ({ label: p.type, value: p.value }))
-    : DEPTS.map((dep) => ({ label: dep, value: Object.values(CH_STATS).reduce((a, s) => a + (s.depts[dep] ?? 0), 0) }))).sort((a, b) => b.value - a.value)
   // 인입 플로우 생키 데이터 — 채널 → 유형 → 부서(가중 분배, 다대다)
   const sankeyData = (() => {
     const mixOf = (t: string) => TYPE_DEPT_MIX[t] ?? [[DEPT_BY_TYPE[t] ?? "고객만족부", 1]]
     const depts = Array.from(new Set(FLOW_TYPES.flatMap((t) => mixOf(t).map(([d]) => d))))
     const nodes = [
-      ...FLOW_CHANNELS.map((c) => ({ id: c.k, nodeColor: c.c })),
-      ...FLOW_TYPES.map((t) => ({ id: t, nodeColor: "#5b8fc9" })),
-      ...depts.map((d) => ({ id: d, nodeColor: "#0c8f78" })),
+      // 채널(좌) 딥네이비 → 유형(중) → 부서(우) 라이트로, 톤온톤 통일
+      ...FLOW_CHANNELS.map((c, i) => ({ id: c.k, nodeColor: ["#12385f", "#2c5486", "#4a6f9e", "#6d8cb0"][i] ?? "#4a6f9e" })),
+      ...FLOW_TYPES.map((t) => ({ id: t, nodeColor: "#8aa6c6" })),
+      ...depts.map((d) => ({ id: d, nodeColor: "#b3c6dd" })),
     ]
     const links: { source: string; target: string; value: number }[] = []
     const typeIn: Record<string, number> = {}
@@ -2250,164 +2496,256 @@ function StatsDashboard() {
     })
     return { nodes, links }
   })()
+  // 섹션별 AI 종합 분석 — 우측 날개창에 모아서 표시
+  const bsvc = DEPT_PROC.find((r) => r.dept === "보상서비스부")
+  const INSIGHTS: { title: string; summary: string; items: string[] }[] = [
+    { title: "① 일일 현황", summary: "위험 민원 급증 — 익일 모니터링 강화", items: [
+      `전체 문의 ${fmtN(totalAll)}건 중 VoC ${fmtN(vocAll)}건(${Math.round((vocAll / totalAll) * 100)}%)으로 전환, 전전일 대비 +6% — 잠재VoC가 +9%로 상승세.`,
+      `위험 높음 ${fmtN(highAll)}건(+12%)이 최대 증가폭이며 마감 직전(16~18시)에 집중 — 익일 해당 시간대 모니터링 강화 권고.`,
+      `대외기관 민원은 소량이나 고위험 비중이 높아 금감원 이첩 건 우선 대응.`,
+    ] },
+    { title: "② 처리 실적", summary: "보상서비스부 병목 — 인력 재배치 우선", items: [
+      `전일 처리율 ${dRate}%·SLA ${dSla}%로 양호하나, 보상서비스부가 SLA ${DEPT_DAILY["보상서비스부"]?.sla ?? 0}%·평균 ${DEPT_DAILY["보상서비스부"]?.aht ?? "-"}로 병목.`,
+      `미처리(이월)는 보상서비스부가 최다(${fmtN((bsvc?.inflow ?? 0) - (bsvc?.done ?? 0))}건) — 인력 재배치·우선 처리 권고.`,
+      `수금·디지털서비스부는 처리율 95%+·SLA 97%+로 안정적 운영.`,
+    ] },
+    { title: "③ 기간 추세", summary: "금요일·월요일 오전 피크 — 인력 선제 배치", items: [
+      `주간 인입은 금요일 최고·오후 15~16시 피크 — 해당 요일·시간대 상담 인력 보강.`,
+      `월요일 오전(09~11시) 일시 급증 — 주말 누적 문의 유입, 개장 직후 처리 여력 확보 필요.`,
+      `최근 7일 위험 탐지가 목~금 평소 범위를 상회 — 주말 전 리스크 관리 강화.`,
+    ] },
+    { title: "④ 유형 분석", summary: "종신보험·고령층 보험금 민원 집중", items: [
+      `종신·실손·암보험이 민원 상위 — 종신보험 집중도가 높아 약관·안내 개선 우선.`,
+      `60~70대는 보험금, 20~30대는 전산·인증 이슈 중심 — 연령대별 응대 채널 최적화.`,
+      `여성은 해지·환급/응대, 남성은 보험금/수금 민원이 상대적으로 높음 — 서비스 품질 개선 영역 우세.`,
+    ] },
+    { title: "⑤ 인입 플로우", summary: "콜센터·고위험 유형이 보상서비스부로 집중", items: [
+      `콜센터 인입이 전 채널 중 최다 — 보험금·해지 유형으로 주로 유입.`,
+      `보험금 부지급·보장 분쟁이 보상서비스부로 집중 이관 — 병목 심화 원인.`,
+      `전산·인증 유형은 디지털서비스부로 분산되어 비교적 원활히 처리.`,
+    ] },
+  ]
   return (
-    <div className="h-full overflow-y-auto bg-white px-[10%] py-5">
-      <div className="space-y-3">
+    <div className="h-full overflow-y-auto bg-[#f5f7fa] px-[4%] py-2.5">
+      {/* details[open] 시 chevron 회전 */}
+      <style>{`details[open] > summary .chevron { transform: rotate(180deg); }`}</style>
+      <div className="space-y-2">
         {/* 헤더 */}
         <div className="flex items-center gap-2 pb-0.5">
-          <span className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-gradient-to-br from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] shadow-sm shadow-[#15457f]/20"><BarChart3 className="h-3.5 w-3.5 text-white" /></span>
+          <span className="flex h-6 w-6 items-center justify-center rounded-[4px] bg-[#0f3468] shadow-sm"><BarChart3 className="h-3.5 w-3.5 text-white" /></span>
           <span className="text-[13.5px] font-bold tracking-tight text-[#10233f]">VoC 통계 대시보드</span>
-          <span className="text-[10px] text-muted-foreground">전사 · 일 단위 통계 · 위젯별 리포트·메인 추가</span>
+          <span className="text-[10px] text-muted-foreground">전사 · 매일 전일 데이터 집계 · 위젯별 리포트·메인 추가</span>
+          {/* 기간 필터 — 실시간 이슈 모니터링과 동일 디자인 재사용 */}
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            {([["today", "전일"], ["week", "이번주"], ["month", "이번달"], ["custom", "기간 설정"]] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setStatPeriod(k)} className={cn("rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", statPeriod === k ? "text-[#0f3468]" : "text-[#9aa7b8] hover:text-[#33445c]")}>{l}</button>
+            ))}
+            <span className="flex items-center gap-1 rounded-md border border-[#dbe5f1] bg-white px-2 py-1">
+              <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
+              <input type="date" value={statFrom} onChange={(e) => setStatFrom(e.target.value)} disabled={statPeriod !== "custom"} className="bg-transparent text-[10.5px] text-[#10233f] outline-none disabled:text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">~</span>
+              <input type="date" value={statTo} onChange={(e) => setStatTo(e.target.value)} disabled={statPeriod !== "custom"} className="bg-transparent text-[10.5px] text-[#10233f] outline-none disabled:text-muted-foreground" />
+            </span>
+          </div>
         </div>
 
-        {/* ── 금일 현황 (일일 기준): 인입 처리 퍼널 + 핵심 지표 ── */}
-        <div className="flex items-center gap-2 pt-1"><span className="text-[11.5px] font-bold text-[#10233f]">금일 현황</span><span className="text-[9px] text-muted-foreground">일일 기준 · 인입 → 처리 · 증감 전일 대비</span><span className="ml-1 h-px flex-1 bg-[#eef1f6]" /></div>
-        {/* 핵심 지표 KPI 6종 + 스파크라인 */}
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
-          {KPIS.map((m) => (
-            <div key={m.label} className="group overflow-hidden rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.10)]">
-              <div className="h-[22px] text-[9.5px] leading-tight text-muted-foreground">{m.label}</div>
-              <div className="mt-0.5 flex items-baseline gap-1">
-                <span className="text-[17px] font-bold leading-none tabular-nums text-[#10233f]">{fmtN(m.value)}</span>
-                <span className="text-[9px] text-muted-foreground">{m.unit}</span>
-                <span className={cn("ml-auto inline-flex items-center text-[9px] font-semibold", m.delta >= 0 ? "text-[#b3261e]" : "text-[#0c8f78]")}>
-                  {m.delta >= 0 ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}{Math.abs(m.delta)}%
-                </span>
+        {/* ───────────────────────── ① 금일 현황 ───────────────────────── */}
+        <StatSection icon={Activity} title="일일 현황" sub="전일 기준 집계 · 증감 전전일 대비" />
+        <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1 space-y-2">
+        {/* KPI 6종 — "위험 높음"만 빨강 강조 */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+          {KPIS.map((m) => {
+            const isDanger = m.label === "위험 높음"
+            return (
+              <div key={m.label} className="group overflow-hidden rounded-[6px] border border-[#e8ecf2] bg-white p-2 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.10)]">
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px]"
+                    style={isDanger ? { background: "#fdecec", color: "#b3261e" } : { background: `${m.accent}14`, color: m.accent }}>
+                    <m.icon className="h-2.5 w-2.5" />
+                  </span>
+                  <div className={cn("min-w-0 flex-1 truncate text-[9px] leading-tight", isDanger ? "font-semibold text-[#b3261e]" : "text-muted-foreground")}>{m.label}</div>
+                  <span className={cn("inline-flex shrink-0 items-center text-[8.5px] font-semibold", m.delta >= 0 ? "text-[#b3261e]" : "text-[#0c8f78]")}>
+                    {m.delta >= 0 ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}{Math.abs(m.delta)}%
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-baseline gap-1">
+                  <span className={cn("text-[15px] font-bold leading-none tabular-nums", isDanger ? "text-[#b3261e]" : "text-[#10233f]")}>{fmtN(m.value)}</span>
+                  <span className="text-[8.5px] text-muted-foreground">{m.unit}</span>
+                </div>
+                <div className="mt-0.5"><NivoSparkline data={m.spark} baseline={m.sparkBase} color={isDanger ? "#e2604f" : m.accent} /></div>
               </div>
-              <div className="mt-1.5"><NivoSparkline data={m.spark} color={m.accent} /></div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-        {/* 인입 → 처리 퍼널 + 전체 VoC 구성(파이) */}
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[58fr_42fr]">
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1.5 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">인입 → 처리 퍼널</span><span className="text-[8.5px] text-muted-foreground">전 채널 문의 → 민원 → 위험 → 적체</span><span className="ml-auto">{acts("stat-funnel", "인입 → 처리 퍼널")}</span></div>
-            <div className="flex flex-1 items-center"><div className="w-full"><NivoFunnel data={FUNNEL_RAW} /></div></div>
+        {/* VoC 구성(도넛 2종) + 인입 → 처리 퍼널 */}
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[60fr_40fr]">
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="유형별 · 위험도별" className="cursor-help text-[11px] font-bold text-[#10233f]">VoC 구성</span><span className="ml-auto">{acts("stat-voc", "VoC 구성")}</span></div>
+            <div className="flex flex-1 flex-wrap items-center justify-around gap-x-4 gap-y-2">
+              <DonutWithLegend caption="유형별" centerSub="VoC" segments={[{ label: "불만VoC", value: compAll, color: "#2f6aa8" }, { label: "잠재VoC", value: potAll, color: "#5a8fbf" }, { label: "대외민원", value: extAgency, color: "#17b39a" }]} />
+              <DonutWithLegend caption="위험도별" centerSub="VoC" segments={[{ label: "고위험", value: highAll, color: "#d1493b" }, { label: "중위험", value: midAll, color: "#e6a83e" }, { label: "저위험", value: lowAll, color: "#5b93b5" }]} />
+            </div>
           </section>
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1.5 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">전체 VoC 구성</span><span className="text-[8.5px] text-muted-foreground">불만 / 잠재 / 대외민원</span><span className="ml-auto">{acts("stat-voc", "전체 VoC 구성")}</span></div>
-            <div className="flex flex-1 flex-col justify-center">
-              <NivoPie segments={[{ label: "불만VoC", value: compAll, color: "#2f8bff" }, { label: "잠재VoC", value: potAll, color: "#3db0ff" }, { label: "대외민원", value: extAgency, color: "#0c8f78" }]} centerTop={fmtN(vocAll)} centerSub="전체 VoC" />
-              <div className="mt-1.5 flex items-center justify-center gap-3">
-                {[{ k: "불만VoC", v: compAll, c: "#2f8bff" }, { k: "잠재VoC", v: potAll, c: "#3db0ff" }, { k: "대외민원", v: extAgency, c: "#0c8f78" }].map((s) => (
-                  <span key={s.k} className="inline-flex items-center gap-1 text-[9px] text-[#5b6b80]"><span className="h-2 w-2 rounded-[2px]" style={{ background: s.c }} />{s.k} <b className="tabular-nums text-[#10233f]">{fmtN(s.v)}</b></span>
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="전체 문의 → VoC → 고위험건 → 고위험건 적체(각 단계는 앞 단계의 부분집합)" className="cursor-help text-[11px] font-bold text-[#10233f]">민원 리스크 단계 퍼널</span><span className="ml-auto">{acts("stat-funnel", "민원 리스크 단계 퍼널")}</span></div>
+            <div className="flex flex-1 items-center"><div className="w-full"><NivoFunnel data={FUNNEL_RAW} /></div></div>
+            {/* 단계 범례 — 색·단계명·건수 */}
+            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
+              {FUNNEL_RAW.map((s) => (
+                <span key={s.k} className="inline-flex items-center gap-1 text-[8.5px] text-[#5b6b80]">
+                  <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: s.c }} />
+                  <span className="truncate">{s.k}</span>
+                  <b className="ml-auto tabular-nums text-[#10233f]">{fmtN(s.v)}</b>
+                </span>
+              ))}
+            </div>
+          </section>
+        </div>
+        </div>
+        <InsightCard title={INSIGHTS[0].title} summary={INSIGHTS[0].summary} items={INSIGHTS[0].items} />
+        </div>
+
+        {/* ───────────────────────── ② 처리 실적 ───────────────────────── */}
+        <StatSection icon={ListChecks} title="처리 실적" sub="전일 기준 · 부서별 처리량·적체·SLA·리드타임" />
+        <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[3fr_7fr]">
+          {/* 핵심 지표 (전일) — 달성률 과녁 게이지 + 절대 실적 */}
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="처리율 · SLA · 처리 품질" className="cursor-help text-[11px] font-bold text-[#10233f]">핵심 지표</span><span className="ml-auto">{acts("stat-daily-kpi", "전일 핵심 지표")}</span></div>
+            <div className="flex flex-1 flex-col justify-between gap-2 py-1">
+              <div className="flex flex-1 items-center"><GaugeRing metrics={DAILY_GAUGE} /></div>
+              <div className="grid grid-cols-3 gap-x-3 gap-y-2 border-t border-[#eef2f7] pt-2">
+                {DAILY_ABS.map((k) => (
+                  <div key={k.label} className="text-center leading-tight">
+                    <div className="text-[8px] text-muted-foreground">{k.label}</div>
+                    <div className="flex items-baseline justify-center gap-0.5"><span className="text-[12px] font-bold tabular-nums text-[#10233f]">{k.value}</span><span className="text-[7.5px] text-muted-foreground">{k.unit}</span></div>
+                    {k.delta !== undefined ? <div className={cn("text-[8px] font-semibold tabular-nums", k.delta > 0 ? "text-[#b3261e]" : "text-[#0c8f78]")}>{k.delta > 0 ? "▲" : "▼"}{Math.abs(k.delta)}</div> : null}
+                  </div>
                 ))}
               </div>
             </div>
           </section>
+
+          {/* 부서별 처리 현황 (전일) */}
+          <section className="rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5">
+              <span title="배정 · 완료 · 미처리(이월)" className="cursor-help text-[11px] font-bold text-[#10233f]">부서별 처리 현황</span>
+              <span className="ml-auto flex items-center gap-2 text-[8px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2 rounded-[1px] bg-[#5b6b80]" />오늘</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2 rounded-[1px] border border-[#93a3ba] bg-[#c0cbdb]" />전일</span>
+                {acts("stat-dept", "부서별 처리 현황")}
+              </span>
+            </div>
+            {(() => {
+              const ordered = [...DEPT_PROC].sort((a, b) => (a.inflow - a.done) - (b.inflow - b.done)).reverse() // 미처리(이월) 많은 순
+              return (
+                <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+                  {ordered.map((r) => { const d = DEPT_DAILY[r.dept]; const pv = DEPT_PREV[r.dept]; return (
+                    <DeptMiniChart key={r.dept} name={r.dept} rate={procRate(r)} sla={d?.sla ?? 0} aht={d?.aht ?? "-"} bars={[
+                      { label: "배정", value: r.inflow, color: "#8aa6c6", prev: pv?.inflow },
+                      { label: "완료", value: r.done, color: "#13355c", prev: pv?.done },
+                      { label: "미처리", value: r.inflow - r.done, color: "#b3261e", prev: pv ? pv.inflow - pv.done : undefined },
+                    ]} />
+                  ) })}
+                </div>
+              )
+            })()}
+          </section>
+        </div>
+        </div>
+        <InsightCard title={INSIGHTS[1].title} summary={INSIGHTS[1].summary} items={INSIGHTS[1].items} />
         </div>
 
-        {/* ── 기간 추세 (주 단위): 민원 탐지 추이 + 민원 인입 강도 ── */}
-        <div className="flex items-center gap-2 pt-1"><span className="text-[11.5px] font-bold text-[#10233f]">기간 추세</span><span className="text-[9px] text-muted-foreground">주 단위 · 추세 · 시점 패턴</span><span className="ml-1 h-px flex-1 bg-[#eef1f6]" /></div>
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        {/* ───────────────────────── ③ 기간 추세 ───────────────────────── */}
+        <StatSection icon={TrendingUp} title="기간 추세" sub="주 단위 · 추세 · 시점 패턴" />
+        <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[7fr_3fr]">
           {/* 추이 — 일별 최근 7일 */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1.5 flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-[#10233f]">민원 탐지 추이</span>
-              <span className="text-[8.5px] text-muted-foreground">일별 · 최근 7일 · 건수</span>
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5">
+              <span title="일별 · 최근 7일 · 운영시간대(09–18시)" className="cursor-help text-[11px] font-bold text-[#10233f]">민원 탐지 추이</span>
               <span className="ml-auto">{acts("stat-trend", "민원 탐지 추이")}</span>
             </div>
-            <div className="min-h-[170px] flex-1"><AreaTrend points={DAILY_TREND} /></div>
-            <div className="mt-1 flex items-center gap-3 text-[8.5px] text-muted-foreground">
+            <div className="min-h-[48px] flex-1"><AreaTrend points={DAILY_TREND} /></div>
+            <div className="mt-1 flex items-center gap-2 text-[8.5px] text-muted-foreground">
               <span className="flex items-center gap-1"><span className="h-1.5 w-3 rounded-sm bg-[#0f3468]" /> 전체 탐지</span>
               <span className="flex items-center gap-1"><span className="h-1.5 w-3 rounded-sm bg-[#e2604f]" /> 위험 높음</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2 rounded-sm bg-[#c3d5ea]" /> 시간대별</span>
               <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-[#e8edf3]" /> 평소 범위</span>
             </div>
           </section>
           {/* 민원 인입 강도 */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-2 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">민원 인입 강도</span><span className="text-[8.5px] text-muted-foreground">요일 × 시간대 · 30일 평균</span><span className="ml-auto">{acts("stat-heat", "민원 인입 강도")}</span></div>
-            <div className="flex flex-1 items-center"><Heatmap days={HEAT_DAYS} hours={HEAT_HOURS} val={heatVal} color="#1e477e" /></div>
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="요일 × 시간대 · 30일 평균" className="cursor-help text-[11px] font-bold text-[#10233f]">민원 인입 강도</span><span className="ml-auto">{acts("stat-heat", "민원 인입 강도")}</span></div>
+            <div className="flex flex-1 items-center"><Heatmap days={HEAT_DAYS} hours={HEAT_HOURS} val={heatVal} color="#102f5e" /></div>
           </section>
         </div>
+        </div>
+        <InsightCard title={INSIGHTS[2].title} summary={INSIGHTS[2].summary} items={INSIGHTS[2].items} />
+        </div>
 
-        {/* ── 유형 분석 ── */}
-        <div className="flex items-center gap-2 pt-1"><span className="text-[11.5px] font-bold text-[#10233f]">유형 분석</span><span className="text-[9px] text-muted-foreground">점유 · 포지셔닝 · 채널 위험 · 원인</span><span className="ml-1 h-px flex-1 bg-[#eef1f6]" /></div>
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {/* 유형 점유율 (트리맵) */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1.5 flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-[#10233f]">유형 점유율</span>
-              <div className="ml-auto flex items-center gap-1">
-                <div className="flex items-center gap-0.5 rounded-[3px] bg-[#eef1f6] p-0.5">
-                  {([["product", "상품"], ["dept", "부서"]] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setDonutBy(k)} className={cn("rounded-[2px] px-1.5 py-0.5 text-[9px] font-semibold transition-colors", donutBy === k ? "bg-white text-[#0f3468] shadow-sm" : "text-[#5b6b80] hover:text-[#10233f]")}>{l}</button>)}
-                </div>
-                {acts("stat-tree", "유형 점유율")}
+        {/* ───────────────────────── ④ 유형 분석 (항상 열림) ───────────────────────── */}
+        <StatSection icon={BarChart3} title="유형 분석" sub="고객 프로파일 · 포지셔닝 · 상품 점유 · 원인" />
+        <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+          {/* 고객 유형별 민원 프로파일 — 성별·나이대 레이더 2종(한 카드) */}
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="성별 · 나이대" className="cursor-help text-[11px] font-bold text-[#10233f]">고객 유형별 민원 프로파일</span><span className="ml-auto">{acts("stat-radar", "고객 유형별 민원 프로파일")}</span></div>
+            <div className="grid grid-cols-2 gap-1">
+              <div>
+                <div className="mb-0.5 pl-1 text-left text-[9px] font-semibold text-[#5b6b80]">성별</div>
+                <EChartRadar axes={RADAR_AXES} series={RADAR_GENDER} height={200} />
+              </div>
+              <div>
+                <div className="mb-0.5 pl-1 text-left text-[9px] font-semibold text-[#5b6b80]">나이대</div>
+                <EChartRadar axes={RADAR_AXES} series={RADAR_AGE} height={200} />
               </div>
             </div>
-            <EChartTreemap items={treeData} />
           </section>
 
           {/* 유형 포지셔닝 (버블) */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">유형 포지셔닝</span><span className="text-[8.5px] text-muted-foreground">건수 × 위험% × 대기(원 크기)</span><span className="ml-auto">{acts("stat-bubble", "유형 포지셔닝")}</span></div>
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="건수 × 위험% × 대기(원 크기)" className="cursor-help text-[11px] font-bold text-[#10233f]">유형 포지셔닝</span><span className="ml-auto">{acts("stat-bubble", "유형 포지셔닝")}</span></div>
             <EChartBubble items={BUBBLES} />
           </section>
 
-          {/* 채널별 위험 프로파일 (레이더) */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">채널별 위험 프로파일</span><span className="text-[8.5px] text-muted-foreground">유형별 위험도(0–100)</span><span className="ml-auto">{acts("stat-radar", "채널별 위험 프로파일")}</span></div>
-            <EChartRadar axes={RADAR_AXES} series={RADAR_SERIES} />
+          {/* 상품별 민원 점유율 (트리맵) */}
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="상품군별 민원 건수" className="cursor-help text-[11px] font-bold text-[#10233f]">상품별 민원 점유율</span><span className="ml-auto">{acts("stat-tree", "상품별 민원 점유율")}</span></div>
+            <EChartTreemap items={PRODUCT_MIX} />
           </section>
 
           {/* 민원 원인 분류 (가로 막대) */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">민원 원인 분류</span><span className="text-[8.5px] text-muted-foreground">서비스 품질 / 제도 개선</span><span className="ml-auto">{acts("stat-cause", "민원 원인 분류")}</span></div>
-            <EChartCauseBar items={[...CAUSE_STATS.service.items.map((x) => ({ ...x, c: "#2f8bff" })), ...CAUSE_STATS.system.items.map((x) => ({ ...x, c: "#0f3468" }))]} />
-            <div className="mt-1 flex items-center justify-center gap-3 text-[9px] text-[#5b6b80]">
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2.5 rounded-sm bg-[#2f8bff]" />서비스 품질</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2.5 rounded-sm bg-[#0f3468]" />제도 개선</span>
+          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+            <div className="mb-1 flex items-center gap-1.5"><span title="서비스 품질 / 제도 개선" className="cursor-help text-[11px] font-bold text-[#10233f]">민원 원인 분류</span><span className="ml-auto">{acts("stat-cause", "민원 원인 분류")}</span></div>
+            <EChartCauseBar items={[...CAUSE_STATS.service.items.map((x) => ({ ...x, c: "#17b39a" })), ...CAUSE_STATS.system.items.map((x) => ({ ...x, c: "#13355c" }))]} />
+            <div className="mt-1 flex items-center justify-center gap-2 text-[9px] text-[#5b6b80]">
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2.5 rounded-sm bg-[#17b39a]" />서비스 품질</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2.5 rounded-sm bg-[#13355c]" />제도 개선</span>
             </div>
           </section>
         </div>
-
-        {/* ── 처리 · 흐름 ── */}
-        <div className="flex items-center gap-2 pt-1"><span className="text-[11.5px] font-bold text-[#10233f]">처리 · 흐름</span><span className="text-[9px] text-muted-foreground">처리 성과 · 부서 적체 · 인입 경로</span><span className="ml-1 h-px flex-1 bg-[#eef1f6]" /></div>
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-          {/* 게이지 */}
-          <section className="flex flex-col rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-            <div className="mb-1.5 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">핵심 운영 지표</span><span className="ml-auto">{acts("stat-gauge", "핵심 운영 지표")}</span></div>
-            <div className="flex flex-1 items-center justify-center"><GaugeRing metrics={GAUGE} /></div>
-          </section>
-
-          {/* 부서별 처리 현황 */}
-          <section className="rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)] xl:col-span-2">
-            <div className="mb-2 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">부서별 처리 현황</span><span className="text-[8.5px] text-muted-foreground">처리 완료 / 신규 유입 · 적체율</span><span className="ml-auto">{acts("stat-dept", "부서별 처리 현황")}</span></div>
-            <div className="overflow-hidden rounded-[3px] border border-[#eef2f7]">
-              <table className="w-full table-fixed border-collapse text-left">
-                <thead className="bg-[#f7fafe] text-[9.5px] font-semibold text-[#3a5e8c]">
-                  <tr><th className="w-8 px-2 py-1.5 text-center">NO</th><th className="px-3 py-1.5">부서</th><th className="w-24 px-2 py-1.5 text-center">처리/유입</th><th className="w-14 px-2 py-1.5 text-center">대기</th><th className="px-3 py-1.5">처리율</th><th className="w-14 px-2 py-1.5 text-center">상태</th></tr>
-                </thead>
-                <tbody>
-                  {[...DEPT_PROC].sort((a, b) => procRate(a) - procRate(b)).map((r, i) => {
-                    const t = procTone(r)
-                    return (
-                      <tr key={r.dept} className="h-[36px] border-t border-[#eef3f9] align-middle text-[10.5px]">
-                        <td className="px-2 text-center text-muted-foreground">{i + 1}</td>
-                        <td className="truncate px-3 font-semibold text-[#10233f]">{r.dept}</td>
-                        <td className="px-2 text-center tabular-nums text-[#10233f]"><b>{fmtN(r.done)}</b><span className="text-muted-foreground"> / {fmtN(r.inflow)}</span></td>
-                        <td className="px-2 text-center font-semibold tabular-nums text-[#10233f]">{fmtN(r.inflow - r.done)}</td>
-                        <td className="px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-8 shrink-0 text-right font-semibold tabular-nums" style={{ color: TONE_HEX2[t] }}>{procRate(r)}%</span>
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#eef2f7]"><div className="h-full rounded-full" style={{ width: `${procRate(r)}%`, background: TONE_HEX2[t] }} /></div>
-                          </div>
-                        </td>
-                        <td className="px-2 text-center"><Chip label={procLabel(t)} level={t} dot /></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+        </div>
+        <InsightCard title={INSIGHTS[3].title} summary={INSIGHTS[3].summary} items={INSIGHTS[3].items} />
         </div>
 
-        {/* 인입 플로우 (전폭) */}
-        <section className="rounded-[4px] border border-[#e8ecf2] bg-white p-3 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
-          <div className="mb-1.5 flex items-center gap-1.5"><span className="text-[11px] font-bold text-[#10233f]">인입 플로우 · 고객여정</span><span className="text-[8.5px] text-muted-foreground">채널 → 유형 분류 → 담당 부서</span><span className="ml-auto">{acts("stat-flow", "인입 플로우")}</span></div>
-          <EChartSankey data={sankeyData} />
-        </section>
+        {/* ───────────── ⑤ 인입 플로우 · 고객여정 — 접이식(기본 접힘) ───────────── */}
+        <details className="group" onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open) window.dispatchEvent(new Event("resize")) }}>
+          <CollapsibleSectionHeader icon={Activity} title="인입 플로우 · 고객여정" sub="채널 → 유형 분류 → 담당 부서" />
+          <div className="mt-2 flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <section className="rounded-[4px] border border-[#e8ecf2] bg-white p-2.5 shadow-[0_1px_3px_rgba(16,35,68,0.05)] transition-shadow hover:shadow-[0_5px_16px_rgba(16,35,68,0.08)]">
+                <div className="mb-1 flex items-center gap-1.5"><span title="가중 분배 · 다대다" className="cursor-help text-[11px] font-bold text-[#10233f]">채널 → 유형 → 부서</span><span className="ml-auto">{acts("stat-flow", "인입 플로우")}</span></div>
+                <EChartSankey data={sankeyData} />
+              </section>
+            </div>
+            <InsightCard title={INSIGHTS[4].title} summary={INSIGHTS[4].summary} items={INSIGHTS[4].items} />
+          </div>
+        </details>
       </div>
 
       {/* 추가 피드백 토스트 */}

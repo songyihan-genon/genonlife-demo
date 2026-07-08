@@ -8,11 +8,15 @@ import ReactECharts from "echarts-for-react"
 type FunnelDatum = { k: string; v: number; c: string }
 
 // 통계 차트 공통 테마 팔레트 — 블루·민트 중심 + 소프트 액센트
-const THEME = ["#2f8bff", "#16c2a3", "#6a8cff", "#3db0ff", "#9b8cff", "#0c8f78", "#ffb454", "#ff7a9c"]
+// 네이비 계열 + 서비스품질 블루·민트 액센트를 섞은 팔레트 — 톤 유지하되 단조로움 완화
+const THEME = ["#13355c", "#2f8bff", "#3a6ea5", "#15c2a2", "#5183b5", "#0c8f78", "#89abcf", "#6d97c2"]
+// 제논라이프 그라데이션(딥네이비→블루→시안→민트) 기반 트리맵 팔레트 — 값 큰 셀=진함, 작을수록 밝게
+const TREEMAP_PALETTE = ["#13355c", "#1f4f86", "#2f6aa8", "#3f83c0", "#5a8fbf", "#7ba6cf", "#17b39a", "#0c8f78", "#4c86b0", "#9bbdd8", "#b9d0e6"]
 
 // ECharts 트리맵 — 유형 점유율
 export function EChartTreemap({ items }: { items: { label: string; value: number }[] }) {
   const option = {
+    tooltip: { show: true, confine: true, formatter: (p: { name: string; value: number }) => `${p.name}<br/>${p.value.toLocaleString()}건` },
     series: [
       {
         type: "treemap",
@@ -25,7 +29,7 @@ export function EChartTreemap({ items }: { items: { label: string; value: number
         bottom: 2,
         label: { show: true, formatter: "{b}\n{c}", fontSize: 10, fontWeight: 600, color: "#fff", lineHeight: 13, overflow: "truncate" },
         itemStyle: { borderColor: "#fff", borderWidth: 2, gapWidth: 2, borderRadius: 3 },
-        data: items.map((it, i) => ({ name: it.label, value: it.value, itemStyle: { color: THEME[i % THEME.length] } })),
+        data: items.map((it, i) => ({ name: it.label, value: it.value, itemStyle: { color: TREEMAP_PALETTE[i % TREEMAP_PALETTE.length] } })),
       },
     ],
   }
@@ -54,7 +58,7 @@ export function EChartBubble({ items }: { items: { label: string; x: number; y: 
 }
 
 // ECharts 레이더 — 채널별 위험 프로파일
-export function EChartRadar({ axes, series }: { axes: string[]; series: { name: string; color: string; values: number[] }[] }) {
+export function EChartRadar({ axes, series, height = 200 }: { axes: string[]; series: { name: string; color: string; values: number[] }[]; height?: number }) {
   const option = {
     color: series.map((s) => s.color),
     tooltip: { trigger: "item", confine: true },
@@ -75,7 +79,7 @@ export function EChartRadar({ axes, series }: { axes: string[]; series: { name: 
       },
     ],
   }
-  return <ReactECharts option={option} style={{ height: 200, width: "100%" }} opts={{ renderer: "svg" }} notMerge lazyUpdate />
+  return <ReactECharts option={option} style={{ height, width: "100%" }} opts={{ renderer: "svg" }} notMerge lazyUpdate />
 }
 
 // ECharts 가로 막대 — 민원 원인 분류(서비스 품질 / 제도 개선)
@@ -125,22 +129,33 @@ export function EChartSankey({ data }: { data: { nodes: { id: string; nodeColor:
 }
 
 const SPARK_HOURS = ["09", "11", "13", "15", "16", "17", "18"]
-// nivo 라인 스파크라인 — KPI 금일 운영시간대 미니 추이
-export function NivoSparkline({ data, color }: { data: number[]; color: string }) {
-  const series = [{ id: "v", data: data.map((y, i) => ({ x: SPARK_HOURS[i] ?? String(i), y })) }]
+// hex를 흰색 방향으로 amt(0~1)만큼 밝히기 — 2톤 면적용
+function tint(hex: string, amt: number) {
+  const n = parseInt(hex.replace("#", ""), 16)
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  const mix = (c: number) => Math.round(c + (255 - c) * amt)
+  return `#${((mix(r) << 16) | (mix(g) << 8) | mix(b)).toString(16).padStart(6, "0")}`
+}
+// nivo 면적 스파크라인 — 저번달 평균(진한 네이비, 아래·앞) + 금일(옅은 톤, 위·뒤) 2층 면적, 뾰족한 직선
+export function NivoSparkline({ data, baseline, color }: { data: number[]; baseline?: number[]; color: string }) {
+  const cur = { id: "cur", data: data.map((y, i) => ({ x: SPARK_HOURS[i] ?? String(i), y })) }
+  const base = baseline ? { id: "base", data: baseline.map((y, i) => ({ x: SPARK_HOURS[i] ?? String(i), y })) } : null
+  // cur(옅은 톤)를 먼저(뒤에), base(진한 톤)를 나중(앞·아래)에 → 진한 면적이 앞을 덮고, 금일이 더 높은 구간만 옅게 위로 비침
+  const series = base ? [cur, base] : [cur]
   return (
-    <div style={{ height: 46 }}>
+    <div style={{ height: 28 }}>
       <ResponsiveLine
         data={series}
-        margin={{ top: 4, right: 4, bottom: 14, left: 4 }}
+        margin={{ top: 3, right: 4, bottom: 9, left: 4 }}
         xScale={{ type: "point" }}
-        yScale={{ type: "linear", min: "auto", max: "auto" }}
-        curve="monotoneX"
-        colors={[color]}
-        lineWidth={1.6}
+        yScale={{ type: "linear", min: 0, max: "auto" }}
+        curve="linear"
+        colors={base ? [tint(color, 0.5), color] : [color]}
+        lineWidth={1}
         enablePoints={false}
         enableArea
-        areaOpacity={0.12}
+        areaBaselineValue={0}
+        areaOpacity={1}
         enableGridX={false}
         enableGridY={false}
         axisLeft={null}
@@ -153,22 +168,23 @@ export function NivoSparkline({ data, color }: { data: number[]; color: string }
   )
 }
 
-// nivo 파이(도넛) — 전체 VoC 구성. 중앙에 합계 라벨
-export function NivoPie({ segments, centerTop, centerSub }: { segments: { label: string; value: number; color: string }[]; centerTop: string; centerSub: string }) {
+// nivo 파이(도넛) — VoC 구성. 중앙에 합계 라벨. size로 크기 조절(범례는 카드 쪽에서 우측 배치)
+export function NivoPie({ segments, centerTop, centerSub, size = 64 }: { segments: { label: string; value: number; color: string }[]; centerTop: string; centerSub: string; size?: number }) {
   const total = segments.reduce((a, s) => a + s.value, 0) || 1
+  const big = size >= 90
   const Center = ({ centerX, centerY }: { centerX: number; centerY: number }) => (
     <g>
-      <text x={centerX} y={centerY - 4} textAnchor="middle" style={{ fontSize: 15, fontWeight: 700, fill: "#10233f" }}>{centerTop}</text>
-      <text x={centerX} y={centerY + 9} textAnchor="middle" style={{ fontSize: 8, fill: "#9aa6b6" }}>{centerSub}</text>
+      <text x={centerX} y={centerY - (big ? 4 : 3)} textAnchor="middle" style={{ fontSize: big ? 13 : 11, fontWeight: 700, fill: "#10233f" }}>{centerTop}</text>
+      <text x={centerX} y={centerY + (big ? 8 : 7)} textAnchor="middle" style={{ fontSize: big ? 8 : 6.5, fill: "#9aa6b6" }}>{centerSub}</text>
     </g>
   )
   return (
-    <div style={{ height: 150 }}>
+    <div style={{ height: size, width: size }}>
       <ResponsivePie
         data={segments.map((s) => ({ id: s.label, label: s.label, value: s.value, color: s.color }))}
         colors={{ datum: "data.color" }}
         margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
-        innerRadius={0.62}
+        innerRadius={0.5}
         padAngle={1}
         cornerRadius={2}
         borderWidth={1}
@@ -176,7 +192,9 @@ export function NivoPie({ segments, centerTop, centerSub }: { segments: { label:
         enableArcLinkLabels={false}
         arcLabel={(d) => `${Math.round((d.value / total) * 100)}%`}
         arcLabelsTextColor="#ffffff"
-        arcLabelsSkipAngle={14}
+        arcLabelsSkipAngle={12}
+        arcLabelsRadiusOffset={0.55}
+        theme={{ labels: { text: { fontSize: 8, fontWeight: 700 } } }}
         layers={["arcs", "arcLabels", Center]}
         animate={false}
       />
@@ -185,17 +203,22 @@ export function NivoPie({ segments, centerTop, centerSub }: { segments: { label:
 }
 
 // nivo 퍼널 — 직선 사다리꼴(곡선 없음), 단계 색 + 값 라벨
+// 밴드 크기(면적)는 실제 건수 비례가 아니라 단계별로 완만히 줄어드는 합성값으로 그린다.
+// (전체 문의가 압도적이라 뒷 단계가 사라지거나, 적체>위험이라 마지막이 커지는 문제 방지)
+// 표시 숫자는 실제 건수로 되돌려 매핑한다.
 export function NivoFunnel({ data }: { data: FunnelDatum[] }) {
+  const sizes = data.map((_, i) => Math.round(1000 * Math.pow(0.66, i))) // 1000 → 660 → 436 → 288 ...
+  const realBySize = new Map(sizes.map((sz, i) => [sz, data[i].v]))
   return (
-    <div style={{ height: 196 }}>
+    <div style={{ height: 54 }}>
       <ResponsiveFunnel
-        data={data.map((s) => ({ id: s.k, value: s.v, label: s.k.replace(/\s*\(.*\)/, "") }))}
+        data={data.map((s, i) => ({ id: s.k, value: sizes[i], label: s.k.replace(/\s*\(.*\)/, "") }))}
         direction="horizontal"
-        margin={{ top: 16, right: 18, bottom: 16, left: 18 }}
+        margin={{ top: 6, right: 14, bottom: 6, left: 14 }}
         colors={data.map((s) => s.c)}
         borderWidth={0}
         labelColor="#ffffff"
-        valueFormat=">-,"
+        valueFormat={(v) => (realBySize.get(v as number) ?? (v as number)).toLocaleString()}
         shapeBlending={0}
         spacing={2}
         enableBeforeSeparators={false}
