@@ -60,11 +60,3 @@ export function getResearchApiBaseUrl() {
   // Next.js 서버가 내부적으로 백엔드(localhost:5588)로 프록시합니다.
   return `${protocol}//${hostname}${port ? `:${port}` : ""}/api/proxy`
 }
-
-export function getResearchAgentEndpoint() {
-  return process.env.RESEARCH_API_ENDPOINT || `${getResearchApiBaseUrl()}/chat/research`
-}
-
-export function getTranslationApiBaseUrl() {
-  return `${getResearchApiBaseUrl()}/translation`
-}
