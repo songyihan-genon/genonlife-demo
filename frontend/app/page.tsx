@@ -1,43 +1,18 @@
 "use client"
 
-import { Suspense, useMemo } from "react"
+import { Suspense, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
-import { Login } from "@/components/login"
-import { ChatInterface } from "@/components/chat-interface"
-import { FormattingTool } from "@/components/FormattingTool"
-import { DocumentationTool } from "@/components/DocumentationTool"
-import { TranslationTool } from "@/components/TranslationTool"
-import { useSearchParams } from "next/navigation"
 
 function HomePageContent() {
   const { isAuthenticated } = useAuth()
-  const searchParams = useSearchParams()
-  const taskParam = searchParams.get("task")
+  const router = useRouter()
 
-  const initialTaskMode = useMemo(() => {
-    if (taskParam === "formatting" || taskParam === "documentation" || taskParam === "translation") {
-      return taskParam as "formatting" | "documentation" | "translation"
-    }
-    return "research-insight" as const
-  }, [taskParam])
+  useEffect(() => {
+    router.replace(isAuthenticated ? "/main" : "/login")
+  }, [isAuthenticated, router])
 
-  if (!isAuthenticated) {
-    return <Login />
-  }
-
-  if (taskParam === "formatting") {
-    return <FormattingTool />
-  }
-
-  if (taskParam === "documentation") {
-    return <DocumentationTool />
-  }
-
-  if (taskParam === "translation") {
-    return <TranslationTool />
-  }
-
-  return <ChatInterface className="h-full" initialTaskMode={initialTaskMode} />
+  return <div className="min-h-screen bg-background" />
 }
 
 export default function HomePage() {

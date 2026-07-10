@@ -9,20 +9,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  BarChart3,
   MessageSquare,
   LogOut,
-  Shield,
   Home,
   FileText,
-  GitFork,
   Headset,
   ShieldCheck,
-  Search,
-  MessageCircleMore,
   Briefcase,
-  Settings2,
-  Bot,
   BotMessageSquare,
   ClipboardCheck,
 } from "lucide-react"
@@ -30,10 +23,6 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { getAuditSection } from "@/lib/sidebar/audit-section"
-import { complianceHistoryPresets } from "@/lib/compliance-demo-history"
-import { generalQaHistoryPresets } from "@/lib/general-qa-demo-history"
-import { staffAssignmentHistoryPresets } from "@/lib/staff-assignment-demo"
 
 interface SidebarProps {
   className?: string
@@ -43,15 +32,8 @@ export function Sidebar({ className }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
-    "실시간 고객상담": true,
-    "단순 질의응답 챗봇": true,
-    "사내규정 검색": true,
-    "업무담당자 배정": true,
-    "문서작성 지원 에이전트": true,
-    "심사이력 추론 에이전트": true,
-    "운영 대시보드": true,
-    "상담 이력 조회": true,
-    "AI VoC 서비스": true,
+    "실시간 고객 상담": true,
+    "상담 품질 검수": true,
   })
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   // 로그인 계정 역할(상담사/관리자) — 좌측 패널 항목 분기
@@ -95,38 +77,10 @@ export function Sidebar({ className }: SidebarProps) {
   }, [showUserMenu])
 
   const agent = searchParams?.get("agent")
-  const preset = searchParams?.get("preset")
   const feature = searchParams?.get("feature")
-  const tool = searchParams?.get("tool")
   const task = searchParams?.get("task")
   const caseParam = searchParams?.get("case")
 
-  useEffect(() => {
-    if (pathname === "/insight-chat" && agent === "assistant" && feature === "counseling" && preset) {
-      setExpandedMenus((prev) => ({ ...prev, "실시간 고객상담": true }))
-    }
-    if (pathname === "/insight-chat" && agent === "assistant" && feature === "general-qa" && preset) {
-      setExpandedMenus((prev) => ({ ...prev, "단순 질의응답 챗봇": true }))
-    }
-    if (pathname === "/insight-chat" && agent === "compliance" && feature === "policy-search" && preset) {
-      setExpandedMenus((prev) => ({ ...prev, "사내규정 검색": true }))
-    }
-    if (pathname === "/staff-assignment" && preset) {
-      setExpandedMenus((prev) => ({ ...prev, "업무담당자 배정": true }))
-    }
-    if (pathname === "/insight-chat" && agent === "document-writer" && preset) {
-      setExpandedMenus((prev) => ({ ...prev, "문서작성 지원 에이전트": true }))
-    }
-    if (pathname === "/insight-chat" && agent === "debt-transfer") {
-      setExpandedMenus((prev) => ({ ...prev, "심사이력 추론 에이전트": true }))
-    }
-    if (pathname === "/admin" || pathname === "/prompt-hub") {
-      setExpandedMenus((prev) => ({ ...prev, "운영 대시보드": true }))
-    }
-  }, [pathname, agent, feature, preset, caseParam])
-
-  // 배포용에서 참고용(WIP) 메뉴 숨김 — 기본은 노출(개발), 배포 빌드에서 NEXT_PUBLIC_SHOW_WIP=false 로 끔
-  const showWip = process.env.NEXT_PUBLIC_SHOW_WIP !== "false"
   const serviceSections = [
     ...(role === "admin"
       ? [
@@ -200,175 +154,6 @@ export function Sidebar({ className }: SidebarProps) {
             ],
           },
         ]),
-    ...(showWip ? [
-    {
-      title: "민원 상담 중 활용",
-      titleIcon: Headset,
-      items: [
-        {
-          name: "AI Portal 홈",
-          href: "/",
-          icon: Home,
-          isActive: pathname === "/" && !searchParams?.get("task"),
-        },
-        {
-          name: "단순 질의응답 챗봇",
-          href: "/insight-chat?agent=assistant&feature=general-qa",
-          icon: Bot,
-          isActive: pathname === "/insight-chat" && agent === "assistant" && feature === "general-qa",
-          children: generalQaHistoryPresets.map((item) => ({
-            name: item.title,
-            href: `/insight-chat?agent=assistant&feature=general-qa&preset=${item.id}`,
-            isActive:
-              pathname === "/insight-chat" &&
-              agent === "assistant" &&
-              feature === "general-qa" &&
-              preset === item.id,
-          })),
-        },
-        {
-          name: "상담지식 에이전트",
-          href: "/counseling-knowledge",
-          icon: Shield,
-          isActive: pathname === "/counseling-knowledge",
-        },
-        {
-          name: "사내규정 검색",
-          href: "/insight-chat?agent=compliance&feature=policy-search",
-          icon: Shield,
-          isActive: pathname === "/insight-chat" && agent === "compliance" && feature === "policy-search",
-          children: complianceHistoryPresets.map((item) => ({
-            name: item.title,
-            href: `/insight-chat?agent=compliance&feature=policy-search&preset=${item.id}`,
-            isActive:
-              pathname === "/insight-chat" &&
-              agent === "compliance" &&
-              feature === "policy-search" &&
-              preset === item.id,
-          })),
-        },
-        {
-          name: "문서분석 지원",
-          href: "/translation",
-          icon: Search,
-          isActive: pathname === "/translation" || (pathname === "/" && searchParams?.get("task") === "translation"),
-        },
-        {
-          name: "표준 상담 스크립트 개발",
-          href: "/documentation?feature=script-studio",
-          icon: FileText,
-          isActive:
-            pathname === "/documentation" &&
-            searchParams?.get("feature") === "script-studio",
-        },
-        { name: "잠재 민원 탐지", href: "/potential-complaint", icon: ShieldCheck, isActive: pathname === "/potential-complaint" },
-      ],
-    },
-    {
-      title: "민원 상담 후 활용",
-      titleIcon: Briefcase,
-      items: [
-        {
-          name: "고객상담 요약",
-          href: "/counseling-summary",
-          icon: Headset,
-          isActive: pathname === "/counseling-summary",
-        },
-        {
-          name: "고객민원 처리 지원",
-          href: "/formatting",
-          icon: MessageCircleMore,
-          isActive:
-            pathname === "/formatting" ||
-            (pathname === "/" && searchParams?.get("task") === "formatting"),
-        },
-        {
-          name: "SMS 자동생성 Agent",
-          href: "/sms-agent",
-          icon: MessageCircleMore,
-          isActive: pathname === "/sms-agent",
-        },
-        {
-          name: "문서 요약/생성 Agent",
-          href: "/doc-summary-agent",
-          icon: FileText,
-          isActive: pathname === "/doc-summary-agent",
-        },
-        {
-          name: "업무담당자 배정",
-          href: "/staff-assignment?view=new",
-          icon: MessageSquare,
-          isActive: pathname === "/staff-assignment" && !preset,
-          children: staffAssignmentHistoryPresets.map((item) => ({
-            name: item.title,
-            href: `/staff-assignment?preset=${item.id}`,
-            isActive: pathname === "/staff-assignment" && preset === item.id,
-          })),
-        },
-        {
-          name: "제휴기관 검색",
-          href: "/partner-search",
-          icon: Search,
-          isActive: pathname === "/partner-search",
-        },
-        {
-          name: "데이터길잡이",
-          href: "/data-guide",
-          icon: BarChart3,
-          isActive: pathname === "/data-guide",
-        },
-        {
-          name: "심사이력 추론 에이전트",
-          href: "/debt-transfer?tab=knowledge",
-          icon: GitFork,
-          isActive: pathname === "/debt-transfer" || (pathname === "/insight-chat" && agent === "debt-transfer"),
-          children: [
-            { name: "이력 데이터 관리", href: "/debt-transfer?tab=knowledge", isActive: pathname === "/debt-transfer" },
-            { name: "양수도 추적", href: "/insight-chat?agent=debt-transfer", isActive: pathname === "/insight-chat" && agent === "debt-transfer" },
-          ],
-        },
-        {
-          name: "문서작성 지원 에이전트",
-          href: "/insight-chat?agent=document-writer&tool=polish",
-          icon: FileText,
-          isActive: pathname === "/insight-chat" && agent === "document-writer",
-          children: [
-            { name: "글다듬이", href: "/insight-chat?agent=document-writer&tool=polish", isActive: pathname === "/insight-chat" && agent === "document-writer" && tool === "polish" },
-            { name: "번역", href: "/insight-chat?agent=document-writer&tool=translation", isActive: pathname === "/insight-chat" && agent === "document-writer" && tool === "translation" },
-            { name: "FAQ 자동생성기", href: "/insight-chat?agent=document-writer&tool=faq", isActive: pathname === "/insight-chat" && agent === "document-writer" && tool === "faq" },
-          ],
-        },
-        {
-          name: "AI 평가 기준",
-          href: "/voc-criteria",
-          icon: ClipboardCheck,
-          isActive: pathname === "/voc-criteria",
-        },
-      ],
-    },
-    getAuditSection(pathname, searchParams?.get("mode") ?? null),
-    {
-      title: "운영 관리",
-      titleIcon: Settings2,
-      items: [
-        {
-          name: "운영 대시보드",
-          href: "/admin",
-          icon: Settings2,
-          isActive: pathname === "/admin" || pathname === "/prompt-hub",
-          children: [
-            { name: "통합 운영 현황", href: "/admin", isActive: pathname === "/admin" && !feature },
-            { name: "AI활용 및 통계", href: "/admin?feature=ai-usage", isActive: pathname === "/admin" && feature === "ai-usage" },
-            { name: "로그 관리", href: "/admin?feature=log-management", isActive: pathname === "/admin" && feature === "log-management" },
-            { name: "상담 모니터링", href: "/admin?feature=counseling-monitoring", isActive: pathname === "/admin" && feature === "counseling-monitoring" },
-            { name: "상담이력관리", href: "/admin?feature=counseling-history", isActive: pathname === "/admin" && feature === "counseling-history" },
-            { name: "품질 모니터링", href: "/admin?feature=quality-monitoring", isActive: pathname === "/admin" && feature === "quality-monitoring" },
-            { name: "프롬프트 라이브러리", href: "/prompt-hub", isActive: pathname === "/prompt-hub" },
-          ],
-        },
-      ],
-    },
-    ] : []),
   ]
 
   return (
@@ -498,9 +283,6 @@ export function Sidebar({ className }: SidebarProps) {
             </nav>
             ) : null}
             {index < serviceSections.length - 1 && <div className="mx-4 my-4 border-t border-white/15" />}
-            {/* 데모: 핵심 섹션 외 메뉴는 뷰포트 아래로 밀어 숨김(스크롤 시 노출, 참고용 유지) */}
-            {/* 상담사: '플랫폼 홈'(0)+'후속업무지원'(1) 뒤 / 관리자: 콜상담 운영 관리·VoC 통합 관리까지(2) 뒤 */}
-            {showWip && index === (role === "admin" ? 2 : 1) ? <div aria-hidden className="h-[90vh] shrink-0" /> : null}
           </div>
         ))}
       </div>
