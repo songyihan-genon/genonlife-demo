@@ -22,6 +22,7 @@ import {
   Layers,
   Loader2,
   MessageSquare,
+  PhoneIncoming,
   PhoneOutgoing,
   ScrollText,
   Send,
@@ -375,7 +376,7 @@ const CUSTOMER_INFO: { group: string; rows: [string, string][] }[] = [
     rows: [
       ["보유 계약", "2건 (유효 2)"],
       ["월 납입 합계", "180,400원"],
-      ["거래 기간", "8년 2개월 (최초 2018.07)"],
+      ["거래 기간", "약 10년 (최초 2016.06)"],
       ["마케팅 수신", "동의 (문자·앱 PUSH)"],
     ],
   },
@@ -467,7 +468,7 @@ const contractDetail: Record<string, ContractDetail> = {
         id: "policy",
         title: "계약 정보",
         rows: [
-          ["가입일", "2018.07.20"],
+          ["가입일", "2016.06.14"],
           ["보험기간", "종신 · 20년납"],
           ["부가 특약", "수술·입원일당·진단 특약"],
           ["피보험자", "김민준 (본인)"],
@@ -532,18 +533,144 @@ function IdleContextBar() {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#dbe5f1] bg-white px-5 py-2.5">
       <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eef4fb] text-[#0f3468]">
           <Headphones className="h-4 w-4" />
         </div>
         <div className="leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="text-[15px] font-bold text-[#10233f]">상담 대기 중</span>
-            <Badge variant="outline" className="h-4 gap-1 border-emerald-200 bg-emerald-50 px-1.5 text-[9px] text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> 수신 대기</Badge>
+            <Badge variant="outline" className="h-4 gap-1 border-[#d6dde6] bg-[#f3f5f8] px-1.5 text-[9px] text-[#5b6b80]"><span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> 수신 대기</Badge>
           </div>
           <div className="text-[10.5px] text-muted-foreground">연결된 고객 없음 · 콜이 인입되면 고객 정보가 자동 연동됩니다</div>
         </div>
       </div>
       <div className="ml-auto hidden text-[10.5px] text-muted-foreground lg:block">빈 시간에는 상담 가이드 · 상품 정보 · 지식 검색으로 업무를 숙지하세요</div>
+    </div>
+  )
+}
+
+// 상단 컨텍스트 바 — 김민준 통화 인입(ringing)
+function IncomingContextBar() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#dbe5f1] bg-white px-5 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-[#005bac] text-white">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#005bac]/40" />
+          <PhoneIncoming className="relative h-4 w-4" />
+        </span>
+        <div className="leading-tight">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[15px] font-bold text-[#10233f]">통화 인입 중</span>
+            <Badge variant="outline" className="h-4 gap-1 border-[#bad6f4] bg-[#f2f8ff] px-1.5 text-[9px] text-[#0b4f91]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#005bac]" /> 김민준 · C-10294857 · IB</Badge>
+          </div>
+          <div className="text-[10.5px] text-muted-foreground">고객 정보를 불러오는 중 · 곧 연결됩니다</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// STT 패널 — 김민준 통화 인입(ringing) + 종합 고객 카드 + 통화 받기(수락)
+// AI 상담 홈 우측 '콜 인입' 카드 포맷 계승 + 실제 업무화면용으로 현재 정보까지 종합 표시
+function IncomingSTT({ onAccept }: { onAccept: () => void }) {
+  const [loaded, setLoaded] = useState(false) // 고객 정보 조회 로딩(약 1초)
+  const [sec, setSec] = useState(0)            // 대기 시간(0부터 실시간 카운트업)
+  useEffect(() => {
+    const t = window.setTimeout(() => setLoaded(true), 1000)
+    const id = window.setInterval(() => setSec((s) => s + 1), 1000)
+    return () => { window.clearTimeout(t); window.clearInterval(id) }
+  }, [])
+  const waitLabel = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-[#f7fafe]">
+      {/* 스크롤 영역 */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="mx-auto w-full max-w-[330px] space-y-3">
+          {/* 인입 헤더 */}
+          <div className="flex flex-col items-center gap-2 text-center">
+            <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#005bac] text-white">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#005bac]/40" />
+              <PhoneIncoming className="relative h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-[13.5px] font-bold text-[#10233f]">김민준 고객 통화 인입</p>
+              <p className="text-[10px] text-muted-foreground">수신 중… 고객 정보 자동 연동</p>
+            </div>
+          </div>
+
+          {/* 종합 고객 카드 */}
+          <div className="overflow-hidden rounded-xl border border-[#d4e0ef] bg-white shadow-sm">
+            {/* 대기 수치 행 (홈 카드 포맷 계승) — 대기 시간 실시간 카운트업 */}
+            <div className="flex items-center divide-x divide-[#eef2f7] border-b border-[#eef2f7]">
+              {([["대기 콜", "1건"], ["대기 시간", waitLabel], ["채널", "IB"]] as [string, string][]).map(([l, v]) => (
+                <div key={l} className="flex flex-1 flex-col items-center py-2">
+                  <span className="text-[9px] text-muted-foreground">{l}</span>
+                  <span className="mt-0.5 text-[13px] font-semibold tabular-nums text-[#10233f]">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {!loaded ? (
+              /* 고객 정보 조회 로딩(약 1초) */
+              <div className="flex items-center gap-2 px-3 py-5 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0f3468]" /> 고객 정보 불러오는 중…
+              </div>
+            ) : (
+              <>
+                {/* 고객 헤더 */}
+                <div className="flex items-center gap-2 border-b border-[#eef2f7] px-3 py-2 duration-300 animate-in fade-in">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eef4fb] text-[#0f3468]"><UserRound className="h-4 w-4" /></span>
+                  <div className="leading-tight">
+                    <div className="flex items-center gap-1.5"><span className="text-[13px] font-bold text-[#10233f]">김민준</span><Badge className="h-4 bg-[#0f3468] px-1.5 text-[9px] hover:bg-[#0f3468]">우량 Gold</Badge></div>
+                    <span className="text-[10px] text-muted-foreground">C-10294857 · 남 · 1985.07.12 (만 39세)</span>
+                  </div>
+                </div>
+                {/* 상세 테이블 (홈: 요약 → 여기: 종합) */}
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {([
+                      ["휴대폰", "010-3***-**42"],
+                      ["상담채널", "콜센터 IB"],
+                      ["세그먼트", "장기 유지 · 다보유"],
+                      ["보유 계약", "2건 · 월 180,400원"],
+                      ["거래 기간", "약 10년 (2016.06~)"],
+                      ["최근 상담", "05.14 보험금 청구 서류 보완"],
+                    ] as [string, string][]).map(([l, v]) => (
+                      <tr key={l} className="border-b border-[#eef2f7] last:border-0">
+                        <td className="w-[76px] bg-[#f7fafd] px-3 py-1.5 text-[10px] text-muted-foreground">{l}</td>
+                        <td className="px-3 py-1.5 text-[11px] font-medium text-[#10233f]">{v}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* 진행 중 보험금 청구 */}
+                <div className="border-t border-[#eef2f7] bg-[#fbfdff] px-3 py-2">
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <ClipboardList className="h-3 w-3 text-[#0f3468]" />
+                    <span className="text-[10px] font-semibold text-[#10233f]">진행 중 보험금 청구</span>
+                    <Badge variant="outline" className="ml-auto h-4 border-amber-200 bg-amber-50 px-1.5 text-[8.5px] text-amber-700">접수중</Badge>
+                  </div>
+                  <p className="text-[10px] leading-snug text-muted-foreground">CLM-20260514-0032 · 실손/종신 접수 · <span className="font-medium text-red-500">진료비 세부내역서 미제출</span></p>
+                </div>
+                {/* AI 예상 문의 (홈 카드 포맷 계승) */}
+                <div className="flex items-start gap-1.5 border-t border-[#eef2f7] px-3 py-2">
+                  <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-[#0f3468]" />
+                  <p className="text-[10px] leading-snug text-[#10233f]"><span className="font-medium text-[#0f3468]">AI</span> 예상 문의 · <span className="font-medium">세부내역서 제출 후 청구 심사 결과·지급 시점 재문의</span></p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 통화 받기 — 하단 고정 + 갭(홈 카드 버튼 포맷 계승) */}
+      <div className="shrink-0 border-t border-[#e6edf5] bg-[#f7fafe] px-4 py-3">
+        <div className="mx-auto w-full max-w-[330px]">
+          <Button onClick={onAccept} className="w-full animate-pulse gap-1.5 rounded-lg bg-[#154a80] text-[12.5px] font-semibold shadow-md ring-2 ring-[#154a80]/25 hover:bg-[#0f3a64]">
+            <Headphones className="h-4 w-4" /> 통화 받기
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -852,7 +979,10 @@ function HaerinSTT() {
 
 export function CounselingAssistantView({ demoCase }: { demoCase?: string | null } = {}) {
   const haerin = demoCase === "haerin" // 정해린 아웃바운드 후속 재안내 — 기존 화면 + STT 발화만 재생
-  const idle = demoCase !== "kim" // 데모 케이스(김민준 자동재생)가 아니면 콜 대기 기본 화면
+  // 파라미터 없는 직접 진입 시: 콜 대기 → 3초 뒤 김민준 통화 인입(ringing) → 자동으로 라이브 데모 전환
+  const [autoKim, setAutoKim] = useState(false)
+  const [incoming, setIncoming] = useState(false) // 통화 인입(ringing) 애니메이션 단계
+  const idle = demoCase !== "kim" && !autoKim // 데모 케이스(김민준) 또는 자동 인입 전까지는 콜 대기 기본 화면
   const [step, setStep] = useState(-1) // -1: 진입 부팅(패널 로딩) → 0부터 시나리오 시작
   const [workLoading, setWorkLoading] = useState(true) // 진입 시 업무정보 로딩
   const [visibleCount, setVisibleCount] = useState(0)
@@ -971,6 +1101,16 @@ export function CounselingAssistantView({ demoCase }: { demoCase?: string | null
     }
   }
 
+  // ---- 콜 대기 → 3초 뒤 김민준 통화 인입(ringing, 유지) → '통화 받기' 수락 시 연결 ----
+  useEffect(() => {
+    if (demoCase) return // 'kim'/'haerin' 등 명시 진입은 제외 — 직접 진입(대기)만 자동 인입
+    const t = window.setTimeout(() => setIncoming(true), 3000) // 인입 애니메이션 시작(수락 전까지 유지)
+    return () => window.clearTimeout(t)
+  }, [demoCase])
+
+  // 통화 받기(수락) → 김민준 케이스 시작
+  const acceptCall = () => { setIncoming(false); setAutoKim(true) }
+
   // ---- 진입 부팅: 업무정보·가이드 0.5초 로딩 → 1초 뒤 첫 발화 ----
   useEffect(() => {
     if (idle) return // 콜 대기(기본) 화면: 시나리오 자동재생 안 함
@@ -983,7 +1123,7 @@ export function CounselingAssistantView({ demoCase }: { demoCase?: string | null
     const t2 = window.setTimeout(() => setStep(0), 1500)
     return () => { window.clearTimeout(t1); window.clearTimeout(t2) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [idle])
 
   // ---- 시나리오 드라이버 (자동 재생 + 무한 루프) ----
   useEffect(() => {
@@ -1220,14 +1360,14 @@ export function CounselingAssistantView({ demoCase }: { demoCase?: string | null
   const pending = checklist.filter((c) => c.status !== "confirmed").length
   const ended = step >= SCENARIO.length // 시나리오 종료(통화 종료)
 
-  // 통화 종료 시 헤더의 '내 상태'를 자동으로 통화 대기로 전환(리플레이로 재개되면 통화 중 복귀)
+  // 헤더 '내 상태' 반영: 대기/인입 중 → 통화 대기, 실제 연결 → 통화 중, 종료 → 통화 대기
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("genon:call-status", { detail: { ended } }))
-  }, [ended])
+    window.dispatchEvent(new CustomEvent("genon:call-status", { detail: { ended, connected: !idle && !ended } }))
+  }, [ended, idle])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f1f5fb]">
-      {haerin ? <HaerinContextBar /> : idle ? <IdleContextBar /> : <ContextBar revealed={revealedFlags} hot={highlight === "context"} />}
+      {haerin ? <HaerinContextBar /> : idle ? (incoming ? <IncomingContextBar /> : <IdleContextBar />) : <ContextBar revealed={revealedFlags} hot={highlight === "context"} />}
 
       <div className="flex min-h-0 flex-1">
         {/* ===== 1) 실시간 STT ===== */}
@@ -1238,9 +1378,15 @@ export function CounselingAssistantView({ demoCase }: { demoCase?: string | null
                 <CircleDot className="h-3 w-3 animate-pulse fill-emerald-500 text-emerald-500" /> 통화 중 · 아웃바운드
               </Badge>
             ) : idle ? (
-              <Badge variant="outline" className="gap-1 border-[#d6dde6] bg-[#f3f5f8] text-[10px] text-[#5b6b80]">
-                <CircleDot className="h-3 w-3 fill-slate-400 text-slate-400" /> 콜 대기 중
-              </Badge>
+              incoming ? (
+                <Badge variant="outline" className="gap-1 border-[#bad6f4] bg-[#f2f8ff] text-[10px] text-[#0b4f91]">
+                  <CircleDot className="h-3 w-3 animate-pulse fill-[#005bac] text-[#005bac]" /> 인입 중
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 border-[#d6dde6] bg-[#f3f5f8] text-[10px] text-[#5b6b80]">
+                  <CircleDot className="h-3 w-3 fill-slate-400 text-slate-400" /> 콜 대기 중
+                </Badge>
+              )
             ) : ended ? (
               <Badge variant="outline" className="gap-1 border-[#d6dde6] bg-[#f3f5f8] text-[10px] text-[#5b6b80]">
                 <CircleDot className="h-3 w-3 fill-slate-400 text-slate-400" /> 통화 종료
@@ -1252,7 +1398,7 @@ export function CounselingAssistantView({ demoCase }: { demoCase?: string | null
             )}
           </PanelHead>
 
-          {haerin ? <HaerinSTT /> : idle ? <IdleSTT /> : (<>
+          {haerin ? <HaerinSTT /> : idle ? (incoming ? <IncomingSTT onAccept={acceptCall} /> : <IdleSTT />) : (<>
           <div className="flex-1 space-y-3 overflow-y-auto bg-[#f7fafe] px-3 py-3">
             {SCENARIO.slice(0, visibleCount).map((s, i) => {
               const isAgent = s.bubble.speaker === "agent"

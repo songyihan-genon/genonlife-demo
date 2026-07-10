@@ -9,6 +9,7 @@ import { Check, ChevronDown, Headphones, PhoneIncoming, Settings, X } from "luci
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
+import { resetDemoFollowupOnce } from "@/lib/demo-session"
 
 interface LayoutContentProps {
   children: React.ReactNode
@@ -26,14 +27,19 @@ export function LayoutContent({ children }: LayoutContentProps) {
   const [showThemePanel, setShowThemePanel] = useState(false)
   const [agentStatus, setAgentStatus] = useState<"통화 대기" | "이석" | "후처리 중">("통화 대기")
   const [callEnded, setCallEnded] = useState(false)
+  const [callConnected, setCallConnected] = useState(false) // 상담 화면에서 실제 통화 연결 여부(대기/인입 중=false)
   // 로그인 역할 — 관리자는 상단 상태 밴드(상담사용) 미표시
   const [role, setRole] = useState<"agent" | "admin">("agent")
   useEffect(() => { try { const r = localStorage.getItem("genon:role"); if (r === "admin" || r === "agent") setRole(r) } catch { /* 데모 */ } }, [pathname])
+
+  // 데모 세션: 새로고침당 1회 후속처리 baseline 초기화 (앱 진입점 — 어떤 후속처리보다 먼저 실행, DEMO_SPEC §7)
+  useEffect(() => { resetDemoFollowupOnce() }, [])
 
   // 화면 전환에 따라 내 상태 자동 반영: 접촉이력 등록·SMS 안내(후처리) 화면 → 후처리 중, 그 외 → 통화 대기
   useEffect(() => {
     if (isCounseling) {
       setCallEnded(false)
+      setCallConnected(false) // 상담 화면 진입 초기엔 대기(콜 연결 이벤트 수신 전)
       setAgentStatus("통화 대기")
     } else if (isPostConsult) {
       setAgentStatus("후처리 중")
@@ -45,9 +51,10 @@ export function LayoutContent({ children }: LayoutContentProps) {
   // 실시간 상담 화면에서 통화가 종료되면 자동으로 통화 대기로 전환
   useEffect(() => {
     const onCallStatus = (e: Event) => {
-      const ended = (e as CustomEvent<{ ended?: boolean }>).detail?.ended
-      setCallEnded(!!ended)
-      if (ended) setAgentStatus("통화 대기")
+      const detail = (e as CustomEvent<{ ended?: boolean; connected?: boolean }>).detail
+      setCallEnded(!!detail?.ended)
+      setCallConnected(!!detail?.connected)
+      if (detail?.ended) setAgentStatus("통화 대기")
     }
     window.addEventListener("genon:call-status", onCallStatus)
     return () => window.removeEventListener("genon:call-status", onCallStatus)
@@ -77,7 +84,9 @@ export function LayoutContent({ children }: LayoutContentProps) {
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" /> 모니터링 중
             </span>
           ) : (["통화 대기", "이석", "후처리 중"] as const).map((s) => {
-            const label = s === "통화 대기" && isCounseling && !callEnded ? "통화 중" : s
+            // 상담 화면에서 실제 통화 연결(connected)일 때만 '통화 중', 대기/인입 중이면 '통화 대기'
+            const inCall = s === "통화 대기" && isCounseling && callConnected && !callEnded
+            const label = inCall ? "통화 중" : s
             return (
               <button
                 key={s}
@@ -88,7 +97,7 @@ export function LayoutContent({ children }: LayoutContentProps) {
                   agentStatus === s ? "border-[#1a4f8f] bg-[#0f3468] text-white" : "border-white/20 bg-white/5 text-white/65 hover:bg-white/15",
                 )}
               >
-                {s === "통화 대기" ? <span className={cn("h-1.5 w-1.5 rounded-full", agentStatus === s ? "bg-emerald-300" : "bg-emerald-400")} /> : null}
+                {s === "통화 대기" ? <span className={cn("h-1.5 w-1.5 rounded-full", inCall ? "bg-emerald-400" : "bg-slate-400")} /> : null}
                 {label}
               </button>
             )

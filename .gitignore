@@ -12,9 +12,19 @@
 
 # Environment files
 **/.env
+**/.env.local
+**/.env*.local
 
 # OS
 .DS_Store
+
+# Office temp/lock files
+~$*
+**/~$*
+
+# Generated presentation decks (regenerate from docs/*.py + *.md sources)
+*.pptx
+*.pdf
 
 # Local-only spec/mockup notes (not for team branch)
 docs/audit-mockup/

@@ -200,11 +200,11 @@ const [q, setQ] = useState("")
       {/* ════════════════════════════════
           LEFT — 메인 작업 존 (화이트)
       ════════════════════════════════ */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#f8fbfe]">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f8fbfe]">
         <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col xl:max-w-4xl 2xl:max-w-5xl">
 
         {/* ── 웰컴 + KPI ── */}
-        <div className="px-10 pb-6 pt-9 xl:px-16 2xl:px-24">
+        <div className="shrink-0 px-10 pb-4 pt-5 xl:px-16 2xl:px-24">
           {/* 웰컴 행 */}
           <div className="mb-5">
             <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">고객서비스팀</p>
@@ -256,7 +256,7 @@ const [q, setQ] = useState("")
         </div>
 
         {/* 구분선 — 네이비→민트 그라데이션 */}
-        <div className="mx-10 h-px xl:mx-16 2xl:mx-24" style={{ background: "linear-gradient(to right, #0f3468 0%, #2f8bff 45%, #15c2a2 100%)", opacity: 0.5 }} />
+        <div className="mx-10 h-px shrink-0 xl:mx-16 2xl:mx-24" style={{ background: "linear-gradient(to right, #0f3468 0%, #2f8bff 45%, #15c2a2 100%)", opacity: 0.5 }} />
 
         {/* ── 업무 어시스턴트 ── */}
         <div className="flex min-h-0 flex-1 flex-col px-10 pb-8 pt-6 xl:px-16 2xl:px-24">
@@ -270,9 +270,9 @@ const [q, setQ] = useState("")
 
           {/* 결과 — 검색 후 상단에 표시(검색창은 자연스럽게 아래로) */}
           {thread.length > 0 ? (
-            <div ref={threadRef} className="relative mb-5 max-h-[68vh] space-y-4 overflow-y-auto pr-1">
+            <div ref={threadRef} className="relative mb-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               {thread.map((it, idx) => { const a = assistAnswer(it.q); const isLast = idx === thread.length - 1; return (
-                <div key={it.id} className={cn("space-y-2", isLast && thread.length > 1 && "min-h-[68vh]")}>
+                <div key={it.id} className={cn("space-y-2", isLast && thread.length > 1 && "min-h-full")}>
                   <div className="flex justify-end"><div className="max-w-[85%] rounded-2xl rounded-tr-sm border border-[#e2e8f0] bg-[#eef1f5] px-3 py-2 text-[11.5px] leading-snug text-[#33445c]">{it.q}</div></div>
                   <div className="rounded-xl border border-[#cfe0f4] bg-[#f6fbff] p-3.5">
                     <div className="mb-1.5 flex items-center gap-1.5"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] shadow-sm shadow-[#15457f]/20"><Sparkles className="h-3 w-3 text-white" /></span><span className="text-[11px] font-semibold text-[#10233f]">AI 어시스턴트</span></div>
@@ -303,7 +303,7 @@ const [q, setQ] = useState("")
           ) : null}
 
           {/* 검색창 — chat-interface 스타일 */}
-          <div className="relative mb-4 rounded-xl bg-gradient-to-r from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] p-[1.5px] shadow-sm">
+          <div className="relative mb-4 shrink-0 rounded-xl bg-gradient-to-r from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] p-[1.5px] shadow-sm">
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -339,7 +339,7 @@ const [q, setQ] = useState("")
               ))}
             </div>
           ) : (
-            <div className="mb-6 flex flex-wrap gap-2">
+            <div className="mb-6 flex shrink-0 flex-wrap gap-2">
               {ASSIST_SUGGEST.map((s) => (
                 <button
                   key={s}
@@ -353,13 +353,13 @@ const [q, setQ] = useState("")
             </div>
           )}
 
-          {/* 바로가기 — 화면 하단 정렬(mt-auto) */}
-          <div className="mt-auto pt-6">
-            <p className="mb-4 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">바로가기</p>
-            <div className="grid grid-cols-4 gap-3.5">
+          {/* 바로가기 — 질문 전엔 하단 고정(mt-auto), 질문 후엔 결과 영역이 공간을 채우므로 자연 배치 */}
+          <div className={cn("shrink-0 pt-3", thread.length === 0 && "mt-auto")}>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">바로가기</p>
+            <div className="grid grid-cols-4 gap-3">
               {TOOLS.map((t) => (
                 <div key={t.label}
-                  className="group flex cursor-default flex-col items-center gap-2.5 rounded-xl border border-[#e6edf5] bg-white px-3 py-5 transition-all hover:border-[#cfe4f6] hover:shadow-sm">
+                  className="group flex cursor-default flex-col items-center gap-2 rounded-xl border border-[#e6edf5] bg-white px-3 py-3 transition-all hover:border-[#cfe4f6] hover:shadow-sm">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#3db0ff] via-[#2f8bff] to-[#15c2a2] p-[1.5px] shadow-sm shadow-[#15457f]/20">
                     <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-white transition-colors group-hover:bg-transparent"><t.icon className="h-4 w-4 text-[#2f8bff] transition-colors group-hover:text-white" /></div>
                   </div>

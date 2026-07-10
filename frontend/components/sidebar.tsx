@@ -50,7 +50,7 @@ export function Sidebar({ className }: SidebarProps) {
     "문서작성 지원 에이전트": true,
     "심사이력 추론 에이전트": true,
     "운영 대시보드": true,
-    "상담 이력 조회": false,
+    "상담 이력 조회": true,
     "AI VoC 서비스": true,
   })
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
@@ -125,6 +125,8 @@ export function Sidebar({ className }: SidebarProps) {
     }
   }, [pathname, agent, feature, preset, caseParam])
 
+  // 배포용에서 참고용(WIP) 메뉴 숨김 — 기본은 노출(개발), 배포 빌드에서 NEXT_PUBLIC_SHOW_WIP=false 로 끔
+  const showWip = process.env.NEXT_PUBLIC_SHOW_WIP !== "false"
   const serviceSections = [
     ...(role === "admin"
       ? [
@@ -171,7 +173,7 @@ export function Sidebar({ className }: SidebarProps) {
                 name: "실시간 고객 상담",
                 href: "/insight-chat?agent=assistant&feature=counseling",
                 icon: Headset,
-                isActive: pathname === "/insight-chat" && (!agent || agent === "assistant") && (!feature || feature === "counseling") && caseParam !== "kim",
+                isActive: pathname === "/insight-chat" && (!agent || agent === "assistant") && (!feature || feature === "counseling"),
                 children: [
                   {
                     name: "데모 케이스 (김민준)",
@@ -185,15 +187,20 @@ export function Sidebar({ className }: SidebarProps) {
                 href: "/post-consultation",
                 icon: ClipboardCheck,
                 isActive: pathname === "/post-consultation" && !task,
-                children: [
-                  { name: "접촉이력 등록", href: "/post-consultation?task=contact", isActive: pathname === "/post-consultation" && task === "contact" },
-                  { name: "SMS 안내", href: "/post-consultation?task=sms", isActive: pathname === "/post-consultation" && task === "sms" },
-                  { name: "상담 검수 결과", href: "/post-consultation?task=audit-result", isActive: pathname === "/post-consultation" && task === "audit-result" },
-                ],
               },
             ],
           },
+          {
+            title: "후속업무지원",
+            titleIcon: Briefcase,
+            items: [
+              { name: "접촉 이력 등록", href: "/post-consultation?task=contact", icon: ClipboardCheck, isActive: pathname === "/post-consultation" && task === "contact" },
+              { name: "SMS 발송", href: "/post-consultation?task=sms", icon: MessageSquare, isActive: pathname === "/post-consultation" && task === "sms" },
+              { name: "상담 검수 결과", href: "/post-consultation?task=audit-result", icon: ShieldCheck, isActive: pathname === "/post-consultation" && task === "audit-result" },
+            ],
+          },
         ]),
+    ...(showWip ? [
     {
       title: "민원 상담 중 활용",
       titleIcon: Headset,
@@ -361,6 +368,7 @@ export function Sidebar({ className }: SidebarProps) {
         },
       ],
     },
+    ] : []),
   ]
 
   return (
@@ -491,8 +499,8 @@ export function Sidebar({ className }: SidebarProps) {
             ) : null}
             {index < serviceSections.length - 1 && <div className="mx-4 my-4 border-t border-white/15" />}
             {/* 데모: 핵심 섹션 외 메뉴는 뷰포트 아래로 밀어 숨김(스크롤 시 노출, 참고용 유지) */}
-            {/* 상담사: '플랫폼 홈'(0) 뒤 / 관리자: 콜상담 운영 관리·VoC 통합 관리까지(2) 뒤 */}
-            {index === (role === "admin" ? 2 : 0) ? <div aria-hidden className="h-[90vh] shrink-0" /> : null}
+            {/* 상담사: '플랫폼 홈'(0)+'후속업무지원'(1) 뒤 / 관리자: 콜상담 운영 관리·VoC 통합 관리까지(2) 뒤 */}
+            {showWip && index === (role === "admin" ? 2 : 1) ? <div aria-hidden className="h-[90vh] shrink-0" /> : null}
           </div>
         ))}
       </div>
